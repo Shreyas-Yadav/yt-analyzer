@@ -1,8 +1,11 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import sys
 import os
+import json
+import asyncio
 from sqlalchemy.orm import Session
 
 # Add the src directory to the python path
@@ -29,57 +32,66 @@ class VideoRequest(BaseModel):
     url: str
     user_id: str = "anonymous" # Default to anonymous if not provided
 
-@app.post("/analyze")
-async def analyze_video(request: VideoRequest, db: Session = Depends(get_db)):
+async def analyze_video_stream(url: str, user_id: str):
+    """Generator function that yields SSE events for each stage"""
     try:
         downloader = VideoDownloader()
-        # For now, we are just downloading. In the future, we will trigger analysis.
-        result = downloader.download_video(request.url)
+        
+        # Stage 1: Download video
+        yield f"data: {json.dumps({'stage': 1, 'message': 'Downloading video...'})}\n\n"
+        await asyncio.sleep(0.1)  # Allow event to be sent
+        
+        result = downloader.download_video(url)
+        video_path = result['filename']
+        video_title = result['title']
+        
+        # Stage 2: Extract audio
+        yield f"data: {json.dumps({'stage': 2, 'message': 'Extracting audio...'})}\n\n"
+        await asyncio.sleep(0.1)
+        
+        audio_path = downloader.extract_audio(video_path)
+        
+        # Stage 3: Generate transcript
+        yield f"data: {json.dumps({'stage': 3, 'message': 'Generating transcript...'})}\n\n"
+        await asyncio.sleep(0.1)
+        
+        transcript_path = downloader.generate_transcript(audio_path, video_title)
         
         # Save to database
-        db_video = Video(
-            user_id=request.user_id,
-            title=result['title'],
-            file_path=result['filename'],
-            url=request.url
-        )
-        db.add(db_video)
-        db.commit()
-        db.refresh(db_video)
-        
-        return {
-            "message": "Video downloaded successfully",
-            "video": {
-                "title": db_video.title,
-                "file_path": db_video.file_path,
-                "id": db_video.id
-            }
-        }
+        from database import SessionLocal
+        db = SessionLocal()
+        try:
+            db_video = Video(
+                user_id=user_id,
+                title=video_title,
+                file_path=video_path,
+                url=url
+            )
+            db.add(db_video)
+            db.commit()
+            db.refresh(db_video)
+            
+            # Send completion event
+            yield f"data: {json.dumps({'stage': 'complete', 'message': 'Video analyzed successfully!', 'video': {'id': db_video.id, 'title': db_video.title}})}\n\n"
+        finally:
+            db.close()
+            
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error during analysis: {e}")
+        yield f"data: {json.dumps({'stage': 'error', 'message': str(e)})}\n\n"
 
-class AudioExtractionRequest(BaseModel):
-    video_id: int
-    user_id: str = "anonymous"
-
-@app.post("/extract-audio")
-async def extract_audio(request: AudioExtractionRequest, db: Session = Depends(get_db)):
-    try:
-        video = db.query(Video).filter(Video.id == request.video_id, Video.user_id == request.user_id).first()
-        if not video:
-            raise HTTPException(status_code=404, detail="Video not found")
-        
-        downloader = VideoDownloader()
-        audio_path = downloader.extract_audio(video.file_path)
-        
-        return {
-            "message": "Audio extracted successfully",
-            "audio_file": os.path.basename(audio_path)
+@app.get("/analyze")
+async def analyze_video(url: str, user_id: str = "anonymous"):
+    return StreamingResponse(
+        analyze_video_stream(url, user_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
         }
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    )
+
 
 @app.get("/videos")
 async def list_videos(user_id: str = "anonymous", db: Session = Depends(get_db)):
@@ -107,9 +119,9 @@ async def delete_video(video_id: int, user_id: str = "anonymous", db: Session = 
         if not video:
             raise HTTPException(status_code=404, detail="Video not found")
         
-        # Delete from filesystem
+        # Delete from filesystem (pass video title for accurate transcript deletion)
         downloader = VideoDownloader()
-        downloader.delete_video(video.file_path)
+        downloader.delete_video(video.file_path, video.title)
         
         # Delete from database
         db.delete(video)

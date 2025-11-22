@@ -1,17 +1,21 @@
 import os
 import yt_dlp
 import ffmpeg
+import whisper
 
 class VideoDownloader:
     def __init__(self, output_dir="downloads"):
         self.output_dir = output_dir
         self.videos_dir = os.path.join(output_dir, "videos")
         self.audio_dir = os.path.join(output_dir, "audio")
+        self.transcripts_dir = os.path.join(output_dir, "transcripts")
         
         if not os.path.exists(self.videos_dir):
             os.makedirs(self.videos_dir)
         if not os.path.exists(self.audio_dir):
             os.makedirs(self.audio_dir)
+        if not os.path.exists(self.transcripts_dir):
+            os.makedirs(self.transcripts_dir)
 
     def download_video(self, url):
         """
@@ -70,6 +74,58 @@ class VideoDownloader:
             print(f"Error extracting audio: {e}")
             raise e
 
+    def generate_transcript(self, audio_path, video_title=None):
+        """
+        Generates transcript from audio file using Whisper.
+        Returns the path to the transcript file.
+        """
+        try:
+            if not os.path.exists(audio_path):
+                raise FileNotFoundError(f"Audio file not found: {audio_path}")
+
+            # Load Whisper model (tiny)
+            print("Loading Whisper model...")
+            model = whisper.load_model("tiny")
+            
+            # Transcribe audio
+            print(f"Transcribing audio: {audio_path}")
+            result = model.transcribe(audio_path, fp16=False)
+            
+            # Construct transcript filename
+            if video_title:
+                transcript_filename = video_title + ".txt"
+            else:
+                audio_filename = os.path.basename(audio_path)
+                transcript_filename = os.path.splitext(audio_filename)[0] + ".txt"
+            
+            transcript_path = os.path.join(self.transcripts_dir, transcript_filename)
+            
+            # Format transcript with timestamps
+            with open(transcript_path, 'w', encoding='utf-8') as f:
+                f.write(f"Transcript: {video_title or 'Unknown'}\n")
+                f.write("=" * 80 + "\n\n")
+                
+                # Write full text
+                f.write("Full Text:\n")
+                f.write("-" * 80 + "\n")
+                f.write(result['text'].strip() + "\n\n")
+                
+                # Write segments with timestamps
+                f.write("\nTimestamped Segments:\n")
+                f.write("-" * 80 + "\n")
+                for segment in result['segments']:
+                    start = segment['start']
+                    end = segment['end']
+                    text = segment['text'].strip()
+                    f.write(f"[{start:.2f}s - {end:.2f}s] {text}\n")
+            
+            print(f"Transcript saved to: {transcript_path}")
+            return transcript_path
+            
+        except Exception as e:
+            print(f"Error generating transcript: {e}")
+            raise e
+
     def list_videos(self):
         """
         Returns a list of downloaded video files.
@@ -84,9 +140,9 @@ class VideoDownloader:
                 files.append(filename)
         return files
 
-    def delete_video(self, filepath):
+    def delete_video(self, filepath, video_title=None):
         """
-        Deletes the video file and associated audio file from the filesystem.
+        Deletes the video file, associated audio file, and transcript from the filesystem.
         """
         deleted = False
         
@@ -102,6 +158,19 @@ class VideoDownloader:
         
         if os.path.exists(audio_path):
             os.remove(audio_path)
+            deleted = True
+        
+        # Delete associated transcript file if it exists
+        # Use video_title if provided (more reliable), otherwise fall back to filename
+        if video_title:
+            transcript_filename = video_title + ".txt"
+        else:
+            transcript_filename = os.path.splitext(video_filename)[0] + ".txt"
+        
+        transcript_path = os.path.join(self.transcripts_dir, transcript_filename)
+        
+        if os.path.exists(transcript_path):
+            os.remove(transcript_path)
             deleted = True
         
         return deleted

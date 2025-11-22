@@ -8,6 +8,7 @@ const Dashboard = () => {
     const [userEmail, setUserEmail] = useState('');
     const [loading, setLoading] = useState(true);
     const [processing, setProcessing] = useState(false);
+    const [currentStage, setCurrentStage] = useState('Initializing...');
     const [videos, setVideos] = useState([]);
     const navigate = useNavigate();
 
@@ -27,33 +28,48 @@ const Dashboard = () => {
     const handleUrlSubmit = async (url) => {
         console.log('Submitted URL:', url);
         setProcessing(true);
-        try {
-            const response = await fetch('http://localhost:8000/analyze', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ url, user_id: userEmail }),
-            });
 
-            if (!response.ok) {
-                throw new Error('Analysis failed');
+        // Create EventSource for Server-Sent Events
+        const eventSource = new EventSource(
+            `http://localhost:8000/analyze?${new URLSearchParams({ url, user_id: userEmail })}`,
+            { withCredentials: false }
+        );
+
+        // Handle incoming messages
+        eventSource.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            console.log('SSE Event:', data);
+
+            if (data.stage === 1) {
+                setCurrentStage('Stage 1/3: Downloading video...');
+            } else if (data.stage === 2) {
+                setCurrentStage('Stage 2/3: Extracting audio...');
+            } else if (data.stage === 3) {
+                setCurrentStage('Stage 3/3: Generating transcript...');
+            } else if (data.stage === 'complete') {
+                toast.success('Video analyzed successfully! Transcript ready.');
+                fetchVideos();
+                eventSource.close();
+                setProcessing(false);
+            } else if (data.stage === 'error') {
+                toast.error(`Error: ${data.message}`);
+                eventSource.close();
+                setProcessing(false);
             }
+        };
 
-            const data = await response.json();
-            console.log('Success:', data);
-            toast.success(data.message || 'Video downloaded successfully!');
-            fetchVideos(); // Refresh list after download
-        } catch (error) {
-            console.error('Error:', error);
+        // Handle errors
+        eventSource.onerror = (error) => {
+            console.error('EventSource error:', error);
             toast.error('Error analyzing video. Please try again.');
-        } finally {
+            eventSource.close();
             setProcessing(false);
-        }
+        };
     };
 
+
     const handleDelete = async (videoId) => {
-        if (!confirm('Are you sure you want to delete this video?')) return;
+        if (!confirm('Are you sure you want to delete this video and all related files?')) return;
 
         try {
             const response = await fetch(`http://localhost:8000/videos/${videoId}?user_id=${userEmail}`, {
@@ -69,29 +85,6 @@ const Dashboard = () => {
         } catch (error) {
             console.error('Error deleting video:', error);
             toast.error('Error deleting video');
-        }
-    };
-
-    const handleExtractAudio = async (videoId) => {
-        const toastId = toast.loading('Extracting audio...');
-        try {
-            const response = await fetch('http://localhost:8000/extract-audio', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ video_id: videoId, user_id: userEmail }),
-            });
-
-            if (!response.ok) {
-                throw new Error('Audio extraction failed');
-            }
-
-            const data = await response.json();
-            toast.success(data.message || 'Audio extracted successfully', { id: toastId });
-        } catch (error) {
-            console.error('Error extracting audio:', error);
-            toast.error('Error extracting audio', { id: toastId });
         }
     };
 
@@ -165,7 +158,7 @@ const Dashboard = () => {
                         {processing && (
                             <div className="flex flex-col items-center space-y-2">
                                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-                                <p className="text-gray-600">Downloading video...</p>
+                                <p className="text-gray-600">{currentStage}</p>
                             </div>
                         )}
 
@@ -188,13 +181,7 @@ const Dashboard = () => {
                                                             Downloaded on {new Date(video.created_at).toLocaleDateString()}
                                                         </p>
                                                     </div>
-                                                    <div className="ml-4 flex-shrink-0 flex space-x-2">
-                                                        <button
-                                                            onClick={() => handleExtractAudio(video.id)}
-                                                            className="font-medium text-indigo-600 hover:text-indigo-500"
-                                                        >
-                                                            Extract Audio
-                                                        </button>
+                                                    <div className="ml-4 flex-shrink-0">
                                                         <button
                                                             onClick={() => handleDelete(video.id)}
                                                             className="font-medium text-red-600 hover:text-red-500"
