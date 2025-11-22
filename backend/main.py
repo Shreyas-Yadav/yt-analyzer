@@ -62,7 +62,39 @@ async def analyze_video(request: VideoRequest, db: Session = Depends(get_db)):
 async def list_videos(user_id: str = "anonymous", db: Session = Depends(get_db)):
     try:
         videos = db.query(Video).filter(Video.user_id == user_id).all()
-        return {"videos": [v.title for v in videos]} # Return titles for now to match frontend expectation roughly
+        return {
+            "videos": [
+                {
+                    "id": v.id,
+                    "title": v.title,
+                    "file_path": v.file_path,
+                    "url": v.url,
+                    "created_at": v.created_at
+                }
+                for v in videos
+            ]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/videos/{video_id}")
+async def delete_video(video_id: int, user_id: str = "anonymous", db: Session = Depends(get_db)):
+    try:
+        video = db.query(Video).filter(Video.id == video_id, Video.user_id == user_id).first()
+        if not video:
+            raise HTTPException(status_code=404, detail="Video not found")
+        
+        # Delete from filesystem
+        downloader = VideoDownloader()
+        downloader.delete_video(video.file_path)
+        
+        # Delete from database
+        db.delete(video)
+        db.commit()
+        
+        return {"message": "Video deleted successfully"}
+    except HTTPException as he:
+        raise he
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

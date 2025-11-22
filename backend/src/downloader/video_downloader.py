@@ -46,3 +46,12 @@ class VideoDownloader:
             if os.path.isfile(os.path.join(self.output_dir, filename)):
                 files.append(filename)
         return files
+
+    def delete_video(self, filepath):
+        """
+        Deletes the video file from the filesystem.
+        """
+        if os.path.exists(filepath):
+            os.remove(filepath)
+            return True
+        return False

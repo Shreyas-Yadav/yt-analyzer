@@ -52,6 +52,26 @@ const Dashboard = () => {
         }
     };
 
+    const handleDelete = async (videoId) => {
+        if (!confirm('Are you sure you want to delete this video?')) return;
+
+        try {
+            const response = await fetch(`http://localhost:8000/videos/${videoId}?user_id=${userEmail}`, {
+                method: 'DELETE',
+            });
+
+            if (response.ok) {
+                toast.success('Video deleted successfully');
+                fetchVideos();
+            } else {
+                throw new Error('Failed to delete video');
+            }
+        } catch (error) {
+            console.error('Error deleting video:', error);
+            toast.error('Error deleting video');
+        }
+    };
+
     useEffect(() => {
         checkUser();
     }, []);
@@ -132,20 +152,31 @@ const Dashboard = () => {
                             {videos.length === 0 ? (
                                 <p className="text-gray-500">No videos downloaded yet.</p>
                             ) : (
-                                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                                    {videos.map((video, index) => (
-                                        <div key={index} className="bg-white overflow-hidden shadow rounded-lg">
-                                            <div className="px-4 py-5 sm:p-6">
-                                                <h3 className="text-lg leading-6 font-medium text-gray-900 truncate" title={video}>
-                                                    {video}
-                                                </h3>
-                                                {/* Placeholder for video player or actions */}
-                                                <div className="mt-2 max-w-xl text-sm text-gray-500">
-                                                    <p>Video file available locally.</p>
+                                <div className="bg-white shadow overflow-hidden sm:rounded-md">
+                                    <ul className="divide-y divide-gray-200">
+                                        {videos.map((video) => (
+                                            <li key={video.id}>
+                                                <div className="px-4 py-4 flex items-center justify-between sm:px-6">
+                                                    <div className="flex-1 min-w-0">
+                                                        <h3 className="text-lg font-medium text-indigo-600 truncate" title={video.title}>
+                                                            {video.title}
+                                                        </h3>
+                                                        <p className="mt-1 text-sm text-gray-500">
+                                                            Downloaded on {new Date(video.created_at).toLocaleDateString()}
+                                                        </p>
+                                                    </div>
+                                                    <div className="ml-4 flex-shrink-0">
+                                                        <button
+                                                            onClick={() => handleDelete(video.id)}
+                                                            className="font-medium text-red-600 hover:text-red-500"
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </div>
-                                    ))}
+                                            </li>
+                                        ))}
+                                    </ul>
                                 </div>
                             )}
                         </div>
