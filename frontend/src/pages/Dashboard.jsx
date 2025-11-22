@@ -72,6 +72,29 @@ const Dashboard = () => {
         }
     };
 
+    const handleExtractAudio = async (videoId) => {
+        const toastId = toast.loading('Extracting audio...');
+        try {
+            const response = await fetch('http://localhost:8000/extract-audio', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ video_id: videoId, user_id: userEmail }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Audio extraction failed');
+            }
+
+            const data = await response.json();
+            toast.success(data.message || 'Audio extracted successfully', { id: toastId });
+        } catch (error) {
+            console.error('Error extracting audio:', error);
+            toast.error('Error extracting audio', { id: toastId });
+        }
+    };
+
     useEffect(() => {
         checkUser();
     }, []);
@@ -165,7 +188,13 @@ const Dashboard = () => {
                                                             Downloaded on {new Date(video.created_at).toLocaleDateString()}
                                                         </p>
                                                     </div>
-                                                    <div className="ml-4 flex-shrink-0">
+                                                    <div className="ml-4 flex-shrink-0 flex space-x-2">
+                                                        <button
+                                                            onClick={() => handleExtractAudio(video.id)}
+                                                            className="font-medium text-indigo-600 hover:text-indigo-500"
+                                                        >
+                                                            Extract Audio
+                                                        </button>
                                                         <button
                                                             onClick={() => handleDelete(video.id)}
                                                             className="font-medium text-red-600 hover:text-red-500"

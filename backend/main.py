@@ -58,6 +58,29 @@ async def analyze_video(request: VideoRequest, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+class AudioExtractionRequest(BaseModel):
+    video_id: int
+    user_id: str = "anonymous"
+
+@app.post("/extract-audio")
+async def extract_audio(request: AudioExtractionRequest, db: Session = Depends(get_db)):
+    try:
+        video = db.query(Video).filter(Video.id == request.video_id, Video.user_id == request.user_id).first()
+        if not video:
+            raise HTTPException(status_code=404, detail="Video not found")
+        
+        downloader = VideoDownloader()
+        audio_path = downloader.extract_audio(video.file_path)
+        
+        return {
+            "message": "Audio extracted successfully",
+            "audio_file": os.path.basename(audio_path)
+        }
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/videos")
 async def list_videos(user_id: str = "anonymous", db: Session = Depends(get_db)):
     try:
