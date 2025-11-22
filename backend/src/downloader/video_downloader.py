@@ -4,18 +4,24 @@ import ffmpeg
 import whisper
 
 class VideoDownloader:
-    def __init__(self, output_dir="downloads"):
+    def __init__(self, output_dir="downloads", user_id=None):
         self.output_dir = output_dir
-        self.videos_dir = os.path.join(output_dir, "videos")
-        self.audio_dir = os.path.join(output_dir, "audio")
-        self.transcripts_dir = os.path.join(output_dir, "transcripts")
+        self.user_id = user_id
         
-        if not os.path.exists(self.videos_dir):
-            os.makedirs(self.videos_dir)
-        if not os.path.exists(self.audio_dir):
-            os.makedirs(self.audio_dir)
-        if not os.path.exists(self.transcripts_dir):
-            os.makedirs(self.transcripts_dir)
+        # Create user-specific subdirectories if user_id is provided
+        if user_id:
+            self.videos_dir = os.path.join(output_dir, "videos", user_id)
+            self.audio_dir = os.path.join(output_dir, "audio", user_id)
+            self.transcripts_dir = os.path.join(output_dir, "transcripts", user_id)
+        else:
+            self.videos_dir = os.path.join(output_dir, "videos")
+            self.audio_dir = os.path.join(output_dir, "audio")
+            self.transcripts_dir = os.path.join(output_dir, "transcripts")
+        
+        # Create directories if they don't exist
+        os.makedirs(self.videos_dir, exist_ok=True)
+        os.makedirs(self.audio_dir, exist_ok=True)
+        os.makedirs(self.transcripts_dir, exist_ok=True)
 
     def download_video(self, url):
         """

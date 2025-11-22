@@ -35,7 +35,7 @@ class VideoRequest(BaseModel):
 async def analyze_video_stream(url: str, user_id: str):
     """Generator function that yields SSE events for each stage"""
     try:
-        downloader = VideoDownloader()
+        downloader = VideoDownloader(user_id=user_id)
         
         # Stage 1: Download video
         yield f"data: {json.dumps({'stage': 1, 'message': 'Downloading video...'})}\n\n"
@@ -119,8 +119,8 @@ async def delete_video(video_id: int, user_id: str = "anonymous", db: Session = 
         if not video:
             raise HTTPException(status_code=404, detail="Video not found")
         
-        # Delete from filesystem (pass video title for accurate transcript deletion)
-        downloader = VideoDownloader()
+        # Delete from filesystem (pass user_id for user-specific paths)
+        downloader = VideoDownloader(user_id=user_id)
         downloader.delete_video(video.file_path, video.title)
         
         # Delete from database

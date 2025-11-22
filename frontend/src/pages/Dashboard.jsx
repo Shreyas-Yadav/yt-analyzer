@@ -164,7 +164,7 @@ const Dashboard = () => {
 
                         {/* Video List */}
                         <div className="w-full max-w-4xl">
-                            <h2 className="text-2xl font-bold text-gray-900 mb-4">Downloaded Videos</h2>
+                            <h2 className="text-2xl font-bold text-gray-900 mb-4">Analyzed Videos</h2>
                             {videos.length === 0 ? (
                                 <p className="text-gray-500">No videos downloaded yet.</p>
                             ) : (
