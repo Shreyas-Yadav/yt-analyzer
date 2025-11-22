@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { signIn, signInWithRedirect } from 'aws-amplify/auth';
+import { AuthService } from '../services/AuthService';
 
 const Login = () => {
     const [email, setEmail] = useState('');
@@ -10,10 +10,7 @@ const Login = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            const { isSignedIn, nextStep } = await signIn({
-                username: email,
-                password,
-            });
+            const { isSignedIn, nextStep } = await AuthService.signIn(email, password);
             console.log('Sign in success:', isSignedIn);
             if (isSignedIn) {
                 navigate('/');
@@ -29,7 +26,7 @@ const Login = () => {
 
     const handleGoogleLogin = async () => {
         try {
-            await signInWithRedirect({ provider: 'Google' });
+            AuthService.signInWithRedirect('Google');
         } catch (error) {
             console.error('Error signing in with Google:', error);
         }

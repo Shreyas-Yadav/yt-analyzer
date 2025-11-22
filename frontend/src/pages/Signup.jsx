@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { signUp, confirmSignUp, signInWithRedirect } from 'aws-amplify/auth';
+import { AuthService } from '../services/AuthService';
 
 const Signup = () => {
     const [email, setEmail] = useState('');
@@ -17,19 +17,9 @@ const Signup = () => {
             return;
         }
         try {
-            const { isSignUpComplete, userId, nextStep } = await signUp({
-                username: email,
-                password,
-                options: {
-                    userAttributes: {
-                        email,
-                    },
-                },
-            });
-            console.log('Sign up success:', userId);
-            if (nextStep.signUpStep === 'CONFIRM_SIGN_UP') {
-                setNeedsConfirmation(true);
-            }
+            const response = await AuthService.signUp(email, password);
+            console.log('Sign up success:', response);
+            setNeedsConfirmation(true);
         } catch (error) {
             console.error('Error signing up:', error);
             alert(`Error signing up: ${error.message}`);
@@ -39,14 +29,9 @@ const Signup = () => {
     const handleConfirmSignUp = async (e) => {
         e.preventDefault();
         try {
-            const { isSignUpComplete, nextStep } = await confirmSignUp({
-                username: email,
-                confirmationCode,
-            });
+            await AuthService.confirmSignUp(email, confirmationCode);
             console.log('Confirm sign up success');
-            if (isSignUpComplete) {
-                navigate('/login');
-            }
+            navigate('/login');
         } catch (error) {
             console.error('Error confirming sign up:', error);
             alert(`Error confirming sign up: ${error.message}`);
@@ -55,7 +40,7 @@ const Signup = () => {
 
     const handleGoogleSignup = async () => {
         try {
-            await signInWithRedirect({ provider: 'Google' });
+            AuthService.signInWithRedirect('Google');
         } catch (error) {
             console.error('Error signing up with Google:', error);
         }
