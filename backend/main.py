@@ -57,6 +57,15 @@ async def analyze_video_stream(url: str, user_id: str):
         
         transcript_path = downloader.generate_transcript(audio_path, video_title)
         
+        # Cleanup: Delete video and audio files to save storage (keep only transcript)
+        print(f"Cleaning up: Deleting video and audio files...")
+        if os.path.exists(video_path):
+            os.remove(video_path)
+            print(f"Deleted video: {video_path}")
+        if os.path.exists(audio_path):
+            os.remove(audio_path)
+            print(f"Deleted audio: {audio_path}")
+        
         # Save to database
         from database import SessionLocal
         db = SessionLocal()

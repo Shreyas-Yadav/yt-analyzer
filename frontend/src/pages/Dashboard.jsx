@@ -88,6 +88,7 @@ const Dashboard = () => {
         }
     };
 
+
     useEffect(() => {
         checkUser();
     }, []);
@@ -181,7 +182,23 @@ const Dashboard = () => {
                                                             Downloaded on {new Date(video.created_at).toLocaleDateString()}
                                                         </p>
                                                     </div>
-                                                    <div className="ml-4 flex-shrink-0">
+                                                    <div className="ml-4 flex-shrink-0 flex items-center space-x-2">
+                                                        <button
+                                                            onClick={() => navigate(`/flashcards/${video.id}`)}
+                                                            className="text-sm font-medium text-indigo-600 hover:text-indigo-800 px-3 py-1 rounded border border-indigo-600 hover:bg-indigo-50"
+                                                            title="Generate Flashcards"
+                                                        >
+                                                            📚 Flashcards
+                                                        </button>
+
+                                                        <button
+                                                            onClick={() => navigate(`/quiz/${video.id}`)}
+                                                            className="text-sm font-medium text-purple-600 hover:text-purple-800 px-3 py-1 rounded border border-purple-600 hover:bg-purple-50"
+                                                            title="Generate Quiz"
+                                                        >
+                                                            ✏️ Quiz
+                                                        </button>
+
                                                         <button
                                                             onClick={() => handleDelete(video.id)}
                                                             className="font-medium text-red-600 hover:text-red-500"

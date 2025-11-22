@@ -3,6 +3,8 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
+import Flashcards from './pages/Flashcards';
+import Quiz from './pages/Quiz';
 import AuthCallback from './pages/AuthCallback';
 
 import { Toaster } from 'react-hot-toast';
@@ -23,7 +25,10 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
-        <Route path="/" element={<Dashboard />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/flashcards/:videoId" element={<Flashcards />} />
+        <Route path="/quiz/:videoId" element={<Quiz />} />
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </Router>
   );
