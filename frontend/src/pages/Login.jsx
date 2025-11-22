@@ -1,19 +1,38 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { signIn, signInWithRedirect } from 'aws-amplify/auth';
 
 const Login = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const navigate = useNavigate();
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        // TODO: Implement login logic
-        console.log('Login:', { email, password });
+        try {
+            const { isSignedIn, nextStep } = await signIn({
+                username: email,
+                password,
+            });
+            console.log('Sign in success:', isSignedIn);
+            if (isSignedIn) {
+                navigate('/');
+            } else {
+                console.log('Next step:', nextStep);
+                // Handle other steps like CONFIRM_SIGN_UP if needed
+            }
+        } catch (error) {
+            console.error('Error signing in:', error);
+            alert(`Error signing in: ${error.message}`);
+        }
     };
 
-    const handleGoogleLogin = () => {
-        // TODO: Implement Google OAuth
-        console.log('Google Login clicked');
+    const handleGoogleLogin = async () => {
+        try {
+            await signInWithRedirect({ provider: 'Google' });
+        } catch (error) {
+            console.error('Error signing in with Google:', error);
+        }
     };
 
     return (
