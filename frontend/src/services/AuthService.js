@@ -162,5 +162,19 @@ export const AuthService = {
         }
 
         return tokens;
+    },
+
+    getUser() {
+        const idToken = localStorage.getItem('idToken');
+        if (!idToken) return null;
+
+        try {
+            const payload = idToken.split('.')[1];
+            const decoded = JSON.parse(atob(payload));
+            return decoded;
+        } catch (e) {
+            console.error("Error decoding token:", e);
+            return null;
+        }
     }
 };

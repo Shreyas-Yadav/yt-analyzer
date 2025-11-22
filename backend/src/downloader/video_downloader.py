@@ -24,7 +24,25 @@ class VideoDownloader:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True)
                 filename = ydl.prepare_filename(info)
-                return filename
+                return {
+                    "filename": filename,
+                    "title": info.get('title', 'Unknown Title'),
+                    "url": url
+                }
         except Exception as e:
             print(f"Error downloading video: {e}")
             raise e
+
+    def list_videos(self):
+        """
+        Returns a list of downloaded video files.
+        """
+        if not os.path.exists(self.output_dir):
+            return []
+        
+        files = []
+        for filename in os.listdir(self.output_dir):
+            # Filter for video files if needed, for now just list all files
+            if os.path.isfile(os.path.join(self.output_dir, filename)):
+                files.append(filename)
+        return files

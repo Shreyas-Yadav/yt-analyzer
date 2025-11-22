@@ -1,2 +1,5 @@
 yt-dlp
 pytest
+sqlalchemy
+pymysql
+mysql-connector-python

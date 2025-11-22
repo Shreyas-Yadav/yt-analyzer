@@ -8,7 +8,21 @@ const Dashboard = () => {
     const [userEmail, setUserEmail] = useState('');
     const [loading, setLoading] = useState(true);
     const [processing, setProcessing] = useState(false);
+    const [videos, setVideos] = useState([]);
     const navigate = useNavigate();
+
+    const fetchVideos = async () => {
+        if (!userEmail) return;
+        try {
+            const response = await fetch(`http://localhost:8000/videos?user_id=${userEmail}`);
+            if (response.ok) {
+                const data = await response.json();
+                setVideos(data.videos);
+            }
+        } catch (error) {
+            console.error('Error fetching videos:', error);
+        }
+    };
 
     const handleUrlSubmit = async (url) => {
         console.log('Submitted URL:', url);
@@ -19,7 +33,7 @@ const Dashboard = () => {
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ url }),
+                body: JSON.stringify({ url, user_id: userEmail }),
             });
 
             if (!response.ok) {
@@ -29,6 +43,7 @@ const Dashboard = () => {
             const data = await response.json();
             console.log('Success:', data);
             toast.success(data.message || 'Video downloaded successfully!');
+            fetchVideos(); // Refresh list after download
         } catch (error) {
             console.error('Error:', error);
             toast.error('Error analyzing video. Please try again.');
@@ -41,24 +56,21 @@ const Dashboard = () => {
         checkUser();
     }, []);
 
+    useEffect(() => {
+        if (userEmail) {
+            fetchVideos();
+        }
+    }, [userEmail]);
+
     const checkUser = async () => {
         try {
             if (!AuthService.isAuthenticated()) {
                 throw new Error('Not authenticated');
             }
-            // Since we don't have a way to get attributes easily without an API call or decoding token,
-            // we'll just use the stored email if we saved it, or decode the token.
-            // For now, let's just show "User" or try to get it from localStorage if we saved it there.
-            // In a real app, we'd decode the ID token.
-            // Let's update AuthService to expose a way to get user details if possible, 
-            // but for now we'll just check if we have tokens.
-
-            // A better approach for "Hello, User" is to decode the idToken.
-            // For this migration, I'll just set a placeholder or decode if I added a decoder.
-            // I didn't add a decoder to AuthService. I'll just show "User" for now or 
-            // if I want to be fancy, I could add a simple decode method to AuthService later.
-
-            // Let's assume we are good if isAuthenticated returns true.
+            const user = AuthService.getUser();
+            if (user && user.email) {
+                setUserEmail(user.email);
+            }
             setLoading(false);
         } catch (error) {
             console.error('Error fetching user:', error);
@@ -89,7 +101,7 @@ const Dashboard = () => {
                         </div>
                         <div className="flex items-center">
                             <span className="mr-4 text-gray-700">
-                                Hello, User
+                                {userEmail || "Hello, User"}
                             </span>
                             <button
                                 onClick={handleSignOut}
@@ -114,9 +126,28 @@ const Dashboard = () => {
                             </div>
                         )}
 
-                        {/* Placeholder for results */}
+                        {/* Video List */}
                         <div className="w-full max-w-4xl">
-                            {/* We can add results display here later */}
+                            <h2 className="text-2xl font-bold text-gray-900 mb-4">Downloaded Videos</h2>
+                            {videos.length === 0 ? (
+                                <p className="text-gray-500">No videos downloaded yet.</p>
+                            ) : (
+                                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                    {videos.map((video, index) => (
+                                        <div key={index} className="bg-white overflow-hidden shadow rounded-lg">
+                                            <div className="px-4 py-5 sm:p-6">
+                                                <h3 className="text-lg leading-6 font-medium text-gray-900 truncate" title={video}>
+                                                    {video}
+                                                </h3>
+                                                {/* Placeholder for video player or actions */}
+                                                <div className="mt-2 max-w-xl text-sm text-gray-500">
+                                                    <p>Video file available locally.</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
