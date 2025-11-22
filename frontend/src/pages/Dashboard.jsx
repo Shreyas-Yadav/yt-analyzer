@@ -2,10 +2,17 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthService } from '../services/AuthService';
 
+import YouTubeInput from '../components/YouTubeInput';
+
 const Dashboard = () => {
     const [userEmail, setUserEmail] = useState('');
     const [loading, setLoading] = useState(true);
     const navigate = useNavigate();
+
+    const handleUrlSubmit = (url) => {
+        console.log('Submitted URL:', url);
+        // TODO: Call backend API to process the video
+    };
 
     useEffect(() => {
         checkUser();
@@ -74,8 +81,13 @@ const Dashboard = () => {
 
             <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
                 <div className="px-4 py-6 sm:px-0">
-                    <div className="border-4 border-dashed border-gray-200 rounded-lg h-96 flex items-center justify-center">
-                        <p className="text-gray-500 text-xl">Dashboard Content Goes Here</p>
+                    <div className="flex flex-col items-center justify-center space-y-8">
+                        <YouTubeInput onSubmit={handleUrlSubmit} />
+
+                        {/* Placeholder for results */}
+                        <div className="w-full max-w-4xl">
+                            {/* We can add results display here later */}
+                        </div>
                     </div>
                 </div>
             </main>
