@@ -1,17 +1,40 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthService } from '../services/AuthService';
-
 import YouTubeInput from '../components/YouTubeInput';
+import toast from 'react-hot-toast';
 
 const Dashboard = () => {
     const [userEmail, setUserEmail] = useState('');
     const [loading, setLoading] = useState(true);
+    const [processing, setProcessing] = useState(false);
     const navigate = useNavigate();
 
-    const handleUrlSubmit = (url) => {
+    const handleUrlSubmit = async (url) => {
         console.log('Submitted URL:', url);
-        // TODO: Call backend API to process the video
+        setProcessing(true);
+        try {
+            const response = await fetch('http://localhost:8000/analyze', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ url }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Analysis failed');
+            }
+
+            const data = await response.json();
+            console.log('Success:', data);
+            toast.success(data.message || 'Video downloaded successfully!');
+        } catch (error) {
+            console.error('Error:', error);
+            toast.error('Error analyzing video. Please try again.');
+        } finally {
+            setProcessing(false);
+        }
     };
 
     useEffect(() => {
@@ -83,6 +106,13 @@ const Dashboard = () => {
                 <div className="px-4 py-6 sm:px-0">
                     <div className="flex flex-col items-center justify-center space-y-8">
                         <YouTubeInput onSubmit={handleUrlSubmit} />
+
+                        {processing && (
+                            <div className="flex flex-col items-center space-y-2">
+                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+                                <p className="text-gray-600">Downloading video...</p>
+                            </div>
+                        )}
 
                         {/* Placeholder for results */}
                         <div className="w-full max-w-4xl">

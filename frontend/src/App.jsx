@@ -5,9 +5,20 @@ import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
 import AuthCallback from './pages/AuthCallback';
 
+import { Toaster } from 'react-hot-toast';
+
 function App() {
   return (
     <Router>
+      <Toaster
+        position="top-center"
+        toastOptions={{
+          duration: 5000,
+          style: {
+            marginTop: '20px',
+          },
+        }}
+      />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />

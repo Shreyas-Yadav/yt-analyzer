@@ -17,6 +17,7 @@ class VideoDownloader:
             'outtmpl': os.path.join(self.output_dir, '%(title)s.%(ext)s'),
             'quiet': True,
             'no_warnings': True,
+            'noplaylist': True,
         }
 
         try:
