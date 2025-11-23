@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import LanguageSelector from '../components/LanguageSelector';
+import { AuthService } from '../services/AuthService';
 
 const Flashcards = () => {
     const { videoId } = useParams();
     const navigate = useNavigate();
     const [videoTitle, setVideoTitle] = useState('');
+    const [selectedLanguage, setSelectedLanguage] = useState('en');
     const [flashcards, setFlashcards] = useState([]);
     const [loading, setLoading] = useState(false);
     const [currentCardIndex, setCurrentCardIndex] = useState(0);
@@ -18,7 +21,8 @@ const Flashcards = () => {
 
     const fetchVideoDetails = async () => {
         try {
-            const userEmail = localStorage.getItem('userEmail') || 'anonymous';
+            const user = AuthService.getUser();
+            const userEmail = user ? user.email : 'anonymous';
             const response = await fetch(`http://localhost:8000/videos?user_id=${userEmail}`);
             const data = await response.json();
             const video = data.videos.find(v => v.id === parseInt(videoId));
@@ -32,14 +36,45 @@ const Flashcards = () => {
 
     const handleGenerateFlashcards = async () => {
         setLoading(true);
-        toast.loading('Generating flashcards...');
+        toast.loading(`Generating flashcards in ${selectedLanguage}...`);
 
-        // Placeholder - will be replaced with actual API call
-        setTimeout(() => {
-            toast.dismiss();
-            toast.info('Flashcard generation coming soon!');
+        try {
+            // Always call translate API to handle non-English videos
+            // if (selectedLanguage !== 'en') {
+            const user = AuthService.getUser();
+            const userEmail = user ? user.email : 'anonymous';
+            const response = await fetch('http://localhost:8000/translate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    video_id: parseInt(videoId),
+                    target_language: selectedLanguage,
+                    user_id: userEmail
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Translation failed');
+            }
+
+            const data = await response.json();
+            console.log('Translation result:', data);
+            toast.success(`Transcript translated to ${selectedLanguage}`);
+
+            // Placeholder for actual flashcard generation
+            setTimeout(() => {
+                toast.dismiss();
+                toast.info('Flashcard generation coming soon!');
+                setLoading(false);
+            }, 1000);
+
+        } catch (error) {
+            console.error('Error:', error);
+            toast.error('Failed to process request');
             setLoading(false);
-        }, 1000);
+        }
     };
 
     const handleFlip = () => {
@@ -95,7 +130,16 @@ const Flashcards = () => {
                                 </svg>
                             </div>
                             <h3 className="text-lg font-medium text-gray-900 mb-2">No flashcards yet</h3>
-                            <p className="text-gray-600 mb-6">Click the button below to generate flashcards from the transcript</p>
+                            <p className="text-gray-600 mb-6">Select a language and click the button below to generate flashcards from the transcript</p>
+
+                            <div className="mb-6 flex justify-center">
+                                <LanguageSelector
+                                    selectedLanguage={selectedLanguage}
+                                    onLanguageChange={setSelectedLanguage}
+                                    disabled={loading}
+                                />
+                            </div>
+
                             <button
                                 onClick={handleGenerateFlashcards}
                                 disabled={loading}

@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
 from downloader.video_downloader import VideoDownloader
+from translator.translator import Translator
 from database import init_db, get_db, Video
 
 app = FastAPI()
@@ -31,6 +32,11 @@ app.add_middleware(
 class VideoRequest(BaseModel):
     url: str
     user_id: str = "anonymous" # Default to anonymous if not provided
+
+class TranslateRequest(BaseModel):
+    video_id: int
+    target_language: str
+    user_id: str = "anonymous"
 
 async def analyze_video_stream(url: str, user_id: str):
     """Generator function that yields SSE events for each stage"""
@@ -140,6 +146,57 @@ async def delete_video(video_id: int, user_id: str = "anonymous", db: Session = 
     except HTTPException as he:
         raise he
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/translate")
+async def translate_video(request: TranslateRequest, db: Session = Depends(get_db)):
+    try:
+        # Get video from DB
+        video = db.query(Video).filter(Video.id == request.video_id, Video.user_id == request.user_id).first()
+        if not video:
+            raise HTTPException(status_code=404, detail="Video not found")
+        
+        # Determine transcript path
+        # Assuming transcript is in the same folder structure as downloader expects
+        downloader = VideoDownloader(user_id=request.user_id)
+        
+        # We need to find the transcript file. 
+        # The DB stores file_path (video path) and title.
+        # VideoDownloader.generate_transcript saves as title.txt or filename.txt
+        # Let's try to reconstruct the path
+        
+        # Option 1: Try title.txt
+        transcript_filename_title = f"{video.title}.txt"
+        transcript_path_title = os.path.join(downloader.transcripts_dir, transcript_filename_title)
+        
+        # Option 2: Try filename.txt (based on video filename)
+        video_filename = os.path.basename(video.file_path)
+        transcript_filename_file = os.path.splitext(video_filename)[0] + ".txt"
+        transcript_path_file = os.path.join(downloader.transcripts_dir, transcript_filename_file)
+        
+        transcript_path = None
+        if os.path.exists(transcript_path_title):
+            transcript_path = transcript_path_title
+        elif os.path.exists(transcript_path_file):
+            transcript_path = transcript_path_file
+        else:
+            raise HTTPException(status_code=404, detail="Original transcript not found")
+            
+        # Perform translation
+        translator = Translator()
+        translated_path = translator.translate_transcript(transcript_path, request.target_language)
+        
+        return {
+            "message": "Translation successful",
+            "original_transcript": transcript_path,
+            "translated_transcript": translated_path,
+            "language": request.target_language
+        }
+        
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"Translation error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health")
