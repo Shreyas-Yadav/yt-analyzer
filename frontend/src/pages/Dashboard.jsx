@@ -200,6 +200,14 @@ const Dashboard = () => {
                                                         </button>
 
                                                         <button
+                                                            onClick={() => navigate(`/transcripts/${video.id}`)}
+                                                            className="text-sm font-medium text-green-600 hover:text-green-800 px-3 py-1 rounded border border-green-600 hover:bg-green-50"
+                                                            title="Manage Transcripts"
+                                                        >
+                                                            🌍 Transcripts
+                                                        </button>
+
+                                                        <button
                                                             onClick={() => handleDelete(video.id)}
                                                             className="font-medium text-red-600 hover:text-red-500"
                                                         >

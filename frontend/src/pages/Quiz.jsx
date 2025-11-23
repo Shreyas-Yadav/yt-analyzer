@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import LanguageSelector from '../components/LanguageSelector';
+import TranscriptSidebar from '../components/TranscriptSidebar';
 import { AuthService } from '../services/AuthService';
 
 const Quiz = () => {
@@ -98,47 +99,56 @@ const Quiz = () => {
                 </div>
             </nav>
 
-            <main className="max-w-4xl mx-auto py-6 sm:px-6 lg:px-8">
-                <div className="px-4 py-6 sm:px-0">
-                    <div className="mb-6">
-                        <h2 className="text-2xl font-bold text-gray-900 mb-2">{videoTitle}</h2>
-                        <p className="text-gray-600">Test your knowledge with a quiz from the video transcript</p>
-                    </div>
+            <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+                <div className="flex gap-6">
+                    {/* Sidebar */}
+                    <TranscriptSidebar
+                        videoId={videoId}
+                        userEmail={AuthService.getUser()?.email || 'anonymous'}
+                    />
 
-                    {!quiz ? (
-                        <div className="bg-white shadow rounded-lg p-8 text-center">
-                            <div className="mb-6">
-                                <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                                </svg>
-                            </div>
-                            <h3 className="text-lg font-medium text-gray-900 mb-2">No quiz yet</h3>
-                            <p className="text-gray-600 mb-6">Select a language and click the button below to generate a quiz from the transcript</p>
+                    {/* Main Content */}
+                    <div className="flex-1 px-4 py-6 sm:px-0">
+                        <div className="mb-6">
+                            <h2 className="text-2xl font-bold text-gray-900 mb-2">{videoTitle}</h2>
+                            <p className="text-gray-600">Test your knowledge with a quiz from the video transcript</p>
+                        </div>
 
-                            <div className="mb-6 flex justify-center">
-                                <LanguageSelector
-                                    selectedLanguage={selectedLanguage}
-                                    onLanguageChange={setSelectedLanguage}
+                        {!quiz ? (
+                            <div className="bg-white shadow rounded-lg p-8 text-center">
+                                <div className="mb-6">
+                                    <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                                    </svg>
+                                </div>
+                                <h3 className="text-lg font-medium text-gray-900 mb-2">No quiz yet</h3>
+                                <p className="text-gray-600 mb-6">Select a language and click the button below to generate a quiz from the transcript</p>
+
+                                <div className="mb-6 flex justify-center">
+                                    <LanguageSelector
+                                        selectedLanguage={selectedLanguage}
+                                        onLanguageChange={setSelectedLanguage}
+                                        disabled={loading}
+                                    />
+                                </div>
+
+                                <button
+                                    onClick={handleGenerateQuiz}
                                     disabled={loading}
-                                />
+                                    className="bg-indigo-600 text-white px-6 py-3 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400"
+                                >
+                                    {loading ? 'Generating...' : '✏️ Generate Quiz'}
+                                </button>
                             </div>
-
-                            <button
-                                onClick={handleGenerateQuiz}
-                                disabled={loading}
-                                className="bg-indigo-600 text-white px-6 py-3 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400"
-                            >
-                                {loading ? 'Generating...' : '✏️ Generate Quiz'}
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="space-y-6">
-                            {/* Quiz display area - for future implementation */}
-                            <div className="bg-white shadow rounded-lg p-8">
-                                <p className="text-gray-600">Quiz viewer coming soon...</p>
+                        ) : (
+                            <div className="space-y-6">
+                                {/* Quiz display area - for future implementation */}
+                                <div className="bg-white shadow rounded-lg p-8">
+                                    <p className="text-gray-600">Quiz viewer coming soon...</p>
+                                </div>
                             </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </div>
             </main>
         </div>

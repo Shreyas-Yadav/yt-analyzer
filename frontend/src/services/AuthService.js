@@ -37,6 +37,28 @@ export const AuthService = {
         return await client.send(command);
     },
 
+
+    async ensureUserInDatabase(email) {
+        try {
+            const response = await fetch('http://localhost:8000/users/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ email }),
+            });
+
+            if (!response.ok) {
+                console.error('Failed to ensure user in database');
+            }
+
+            const data = await response.json();
+            console.log(data.message);
+        } catch (error) {
+            console.error('Error ensuring user in database:', error);
+        }
+    },
+
     async signIn(email, password) {
         const command = new InitiateAuthCommand({
             AuthFlow: "USER_PASSWORD_AUTH",
@@ -56,6 +78,10 @@ export const AuthService = {
             if (RefreshToken) {
                 localStorage.setItem('refreshToken', RefreshToken);
             }
+
+            // Ensure user exists in database
+            await this.ensureUserInDatabase(email);
+
             return { isSignedIn: true };
         }
 
@@ -159,6 +185,12 @@ export const AuthService = {
         localStorage.setItem('idToken', tokens.id_token);
         if (tokens.refresh_token) {
             localStorage.setItem('refreshToken', tokens.refresh_token);
+        }
+
+        // Ensure user exists in database
+        const user = this.getUser();
+        if (user && user.email) {
+            await this.ensureUserInDatabase(user.email);
         }
 
         return tokens;

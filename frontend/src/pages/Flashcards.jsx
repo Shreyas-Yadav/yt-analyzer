@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import LanguageSelector from '../components/LanguageSelector';
+import TranscriptSidebar from '../components/TranscriptSidebar';
 import { AuthService } from '../services/AuthService';
 
 const Flashcards = () => {
@@ -115,47 +116,56 @@ const Flashcards = () => {
                 </div>
             </nav>
 
-            <main className="max-w-4xl mx-auto py-6 sm:px-6 lg:px-8">
-                <div className="px-4 py-6 sm:px-0">
-                    <div className="mb-6">
-                        <h2 className="text-2xl font-bold text-gray-900 mb-2">{videoTitle}</h2>
-                        <p className="text-gray-600">Generate flashcards from the video transcript</p>
-                    </div>
+            <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+                <div className="flex gap-6">
+                    {/* Sidebar */}
+                    <TranscriptSidebar
+                        videoId={videoId}
+                        userEmail={AuthService.getUser()?.email || 'anonymous'}
+                    />
 
-                    {flashcards.length === 0 ? (
-                        <div className="bg-white shadow rounded-lg p-8 text-center">
-                            <div className="mb-6">
-                                <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
-                            </div>
-                            <h3 className="text-lg font-medium text-gray-900 mb-2">No flashcards yet</h3>
-                            <p className="text-gray-600 mb-6">Select a language and click the button below to generate flashcards from the transcript</p>
+                    {/* Main Content */}
+                    <div className="flex-1 px-4 py-6 sm:px-0">
+                        <div className="mb-6">
+                            <h2 className="text-2xl font-bold text-gray-900 mb-2">{videoTitle}</h2>
+                            <p className="text-gray-600">Generate flashcards from the video transcript</p>
+                        </div>
 
-                            <div className="mb-6 flex justify-center">
-                                <LanguageSelector
-                                    selectedLanguage={selectedLanguage}
-                                    onLanguageChange={setSelectedLanguage}
+                        {flashcards.length === 0 ? (
+                            <div className="bg-white shadow rounded-lg p-8 text-center">
+                                <div className="mb-6">
+                                    <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                </div>
+                                <h3 className="text-lg font-medium text-gray-900 mb-2">No flashcards yet</h3>
+                                <p className="text-gray-600 mb-6">Select a language and click the button below to generate flashcards from the transcript</p>
+
+                                <div className="mb-6 flex justify-center">
+                                    <LanguageSelector
+                                        selectedLanguage={selectedLanguage}
+                                        onLanguageChange={setSelectedLanguage}
+                                        disabled={loading}
+                                    />
+                                </div>
+
+                                <button
+                                    onClick={handleGenerateFlashcards}
                                     disabled={loading}
-                                />
+                                    className="bg-indigo-600 text-white px-6 py-3 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400"
+                                >
+                                    {loading ? 'Generating...' : '📚 Generate Flashcards'}
+                                </button>
                             </div>
-
-                            <button
-                                onClick={handleGenerateFlashcards}
-                                disabled={loading}
-                                className="bg-indigo-600 text-white px-6 py-3 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400"
-                            >
-                                {loading ? 'Generating...' : '📚 Generate Flashcards'}
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="space-y-6">
-                            {/* Flashcard display area - for future implementation */}
-                            <div className="bg-white shadow rounded-lg p-8">
-                                <p className="text-gray-600">Flashcard viewer coming soon...</p>
+                        ) : (
+                            <div className="space-y-6">
+                                {/* Flashcard display area - for future implementation */}
+                                <div className="bg-white shadow rounded-lg p-8">
+                                    <p className="text-gray-600">Flashcard viewer coming soon...</p>
+                                </div>
                             </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </div>
             </main>
         </div>

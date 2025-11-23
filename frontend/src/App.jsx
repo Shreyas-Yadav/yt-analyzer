@@ -5,6 +5,7 @@ import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
 import Flashcards from './pages/Flashcards';
 import Quiz from './pages/Quiz';
+import Transcripts from './pages/Transcripts';
 import AuthCallback from './pages/AuthCallback';
 
 import { Toaster } from 'react-hot-toast';
@@ -28,6 +29,7 @@ function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/flashcards/:videoId" element={<Flashcards />} />
         <Route path="/quiz/:videoId" element={<Quiz />} />
+        <Route path="/transcripts/:videoId" element={<Transcripts />} />
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </Router>

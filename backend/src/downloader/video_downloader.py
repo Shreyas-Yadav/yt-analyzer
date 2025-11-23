@@ -146,37 +146,32 @@ class VideoDownloader:
                 files.append(filename)
         return files
 
-    def delete_video(self, filepath, video_title=None):
+    def delete_video(self, filepath, video_title):
         """
-        Deletes the video file, associated audio file, and transcript from the filesystem.
+        Delete video, audio, and transcript files.
+        Since we no longer store video path, we rely on video_title to find and delete transcripts.
+        Video and audio files are already deleted after processing.
         """
         deleted = False
         
-        # Delete video file
-        if os.path.exists(filepath):
-            os.remove(filepath)
-            deleted = True
-        
-        # Delete associated audio file if it exists
-        video_filename = os.path.basename(filepath)
-        audio_filename = os.path.splitext(video_filename)[0] + ".mp3"
-        audio_path = os.path.join(self.audio_dir, audio_filename)
-        
-        if os.path.exists(audio_path):
-            os.remove(audio_path)
-            deleted = True
+        # Video and audio files are already deleted after processing
+        # We only need to delete transcript files
         
         # Delete associated transcript file if it exists
-        # Use video_title if provided (more reliable), otherwise fall back to filename
         if video_title:
             transcript_filename = video_title + ".txt"
-        else:
-            transcript_filename = os.path.splitext(video_filename)[0] + ".txt"
-        
-        transcript_path = os.path.join(self.transcripts_dir, transcript_filename)
-        
-        if os.path.exists(transcript_path):
-            os.remove(transcript_path)
-            deleted = True
+            transcript_path = os.path.join(self.transcripts_dir, transcript_filename)
+            
+            if os.path.exists(transcript_path):
+                os.remove(transcript_path)
+                deleted = True
+                
+            # Also delete any translated transcripts
+            import glob
+            transcript_pattern = os.path.join(self.transcripts_dir, f"{video_title}_*.txt")
+            for translated_file in glob.glob(transcript_pattern):
+                if os.path.exists(translated_file):
+                    os.remove(translated_file)
+                    deleted = True
         
         return deleted
