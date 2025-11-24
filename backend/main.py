@@ -20,6 +20,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 from downloader.video_downloader import VideoDownloader
 from translator.translator import Translator
 from generator.flashcard_generator import FlashcardGenerator
+from generator.quiz_generator import QuizGenerator
 from database import init_db, get_db, Video, User, Transcript, Flashcard, Quiz
 
 app = FastAPI()
@@ -55,6 +56,17 @@ class SaveFlashcardsRequest(BaseModel):
     user_id: str
     language: str
     flashcards: List[dict]
+
+class GenerateQuizRequest(BaseModel):
+    video_id: int
+    language: str = "en"
+    user_id: str
+
+class SaveQuizRequest(BaseModel):
+    video_id: int
+    user_id: str
+    language: str
+    quiz: List[dict]
 
 class UserLoginRequest(BaseModel):
     email: str
@@ -502,6 +514,253 @@ async def get_flashcard_content(flashcard_id: int, user_id: str = "anonymous", d
         raise he
     except Exception as e:
         print(f"Error reading flashcard content: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+        return {"flashcards": content}
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"Error reading flashcard content: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ==================== QUIZ ENDPOINTS ====================
+
+@app.post("/quiz/generate")
+async def generate_quiz(request: GenerateQuizRequest, db: Session = Depends(get_db)):
+    try:
+        # Find user
+        user = db.query(User).filter(User.email == request.user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Find video
+        video = db.query(Video).filter(Video.id == request.video_id, Video.user_id == user.id).first()
+        if not video:
+            raise HTTPException(status_code=404, detail="Video not found")
+
+        # Get transcript for the specified language
+        transcript = db.query(Transcript).filter(
+            Transcript.video_id == request.video_id,
+            Transcript.language == request.language
+        ).first()
+
+        if not transcript:
+            raise HTTPException(status_code=404, detail=f"No transcript found for language: {request.language}")
+
+        # Read transcript content
+        if not os.path.exists(transcript.file_path):
+            raise HTTPException(status_code=404, detail="Transcript file not found on server")
+
+        with open(transcript.file_path, "r", encoding='utf-8') as f:
+            transcript_text = f.read()
+
+        # Generate quiz using QuizGenerator
+        generator = QuizGenerator()
+        questions = generator.generate_quiz(transcript_text, request.language)
+
+        # Convert to dict format
+        quiz_data = [
+            {
+                "question": q.question,
+                "options": q.options,
+                "correct_answer": q.correct_answer
+            }
+            for q in questions
+        ]
+
+        return {"quiz": quiz_data}
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"Quiz generation error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/quiz/save")
+async def save_quiz(request: SaveQuizRequest, db: Session = Depends(get_db)):
+    try:
+        # 1. Save to File System
+        base_dir = "downloads"
+        quiz_dir = os.path.join(base_dir, "quizzes", str(request.user_id), str(request.video_id))
+        os.makedirs(quiz_dir, exist_ok=True)
+
+        filename = f"quiz_{request.language}.json"
+        file_path = os.path.join(quiz_dir, filename)
+
+        # Save to JSON file
+        with open(file_path, "w", encoding='utf-8') as f:
+            json.dump(request.quiz, f, ensure_ascii=False, indent=2)
+
+        # 2. Save to Database
+        # Find user
+        user = db.query(User).filter(User.email == request.user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Find video
+        video = db.query(Video).filter(Video.id == request.video_id, Video.user_id == user.id).first()
+        if not video:
+             raise HTTPException(status_code=404, detail="Video not found")
+
+        # Check if quiz already exists for this video/language
+        existing_quiz = db.query(Quiz).filter(
+            Quiz.video_id == video.id,
+            Quiz.language == request.language
+        ).first()
+
+        if existing_quiz:
+            # Update existing
+            existing_quiz.file_path = file_path
+            existing_quiz.created_at = datetime.datetime.utcnow()
+            db.commit()
+            db.refresh(existing_quiz)
+            print(f"Updated existing quiz for video {video.id} lang {request.language}")
+        else:
+            # Create new
+            new_quiz = Quiz(
+                video_id=video.id,
+                user_id=user.id,
+                language=request.language,
+                file_path=file_path
+            )
+            db.add(new_quiz)
+            db.commit()
+            db.refresh(new_quiz)
+            print(f"Created new quiz for video {video.id}")
+
+        return {"message": "Quiz saved successfully", "file_path": file_path}
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"Error saving quiz: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/videos/{video_id}/quizzes")
+async def get_video_quizzes(video_id: int, user_id: str = "anonymous", db: Session = Depends(get_db)):
+    """Get all saved quizzes for a specific video."""
+    try:
+        # Find user by email
+        user = db.query(User).filter(User.email == user_id).first()
+        if not user:
+            return {"quizzes": []}
+        
+        # Verify video belongs to user
+        video = db.query(Video).filter(Video.id == video_id, Video.user_id == user.id).first()
+        if not video:
+            raise HTTPException(status_code=404, detail="Video not found")
+        
+        # Get all quizzes for this video
+        quizzes = db.query(Quiz).filter(Quiz.video_id == video_id).all()
+        
+        return {
+            "quizzes": [
+                {
+                    "id": q.id,
+                    "language": q.language,
+                    "file_path": q.file_path,
+                    "created_at": q.created_at
+                }
+                for q in quizzes
+            ]
+        }
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/quiz/{quiz_id}/content")
+async def get_quiz_content(quiz_id: int, user_id: str = "anonymous", db: Session = Depends(get_db)):
+    try:
+        # Find user
+        user = db.query(User).filter(User.email == user_id).first()
+        if not user:
+             raise HTTPException(status_code=404, detail="User not found")
+
+        # Find quiz
+        quiz = db.query(Quiz).filter(Quiz.id == quiz_id, Quiz.user_id == user.id).first()
+        if not quiz:
+            raise HTTPException(status_code=404, detail="Quiz not found")
+
+        # Read file content
+        if not os.path.exists(quiz.file_path):
+             raise HTTPException(status_code=404, detail="Quiz file not found on server")
+
+        with open(quiz.file_path, "r", encoding='utf-8') as f:
+            content = json.load(f)
+
+        return {"quiz": content}
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"Error reading quiz content: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/flashcards/{flashcard_id}")
+async def delete_flashcard(flashcard_id: int, user_id: str = "anonymous", db: Session = Depends(get_db)):
+    """Delete a saved flashcard set."""
+    try:
+        # Find user
+        user = db.query(User).filter(User.email == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Find flashcard
+        flashcard = db.query(Flashcard).filter(Flashcard.id == flashcard_id, Flashcard.user_id == user.id).first()
+        if not flashcard:
+            raise HTTPException(status_code=404, detail="Flashcard set not found")
+
+        # Delete file if exists
+        if os.path.exists(flashcard.file_path):
+            os.remove(flashcard.file_path)
+            print(f"Deleted flashcard file: {flashcard.file_path}")
+
+        # Delete from database
+        db.delete(flashcard)
+        db.commit()
+        print(f"Deleted flashcard record with id: {flashcard_id}")
+
+        return {"message": "Flashcard set deleted successfully"}
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"Error deleting flashcard: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/quiz/{quiz_id}")
+async def delete_quiz(quiz_id: int, user_id: str = "anonymous", db: Session = Depends(get_db)):
+    """Delete a saved quiz."""
+    try:
+        # Find user
+        user = db.query(User).filter(User.email == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Find quiz
+        quiz = db.query(Quiz).filter(Quiz.id == quiz_id, Quiz.user_id == user.id).first()
+        if not quiz:
+            raise HTTPException(status_code=404, detail="Quiz not found")
+
+        # Delete file if exists
+        if os.path.exists(quiz.file_path):
+            os.remove(quiz.file_path)
+            print(f"Deleted quiz file: {quiz.file_path}")
+
+        # Delete from database
+        db.delete(quiz)
+        db.commit()
+        print(f"Deleted quiz record with id: {quiz_id}")
+
+        return {"message": "Quiz deleted successfully"}
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"Error deleting quiz: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health")

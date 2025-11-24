@@ -76,7 +76,7 @@ class Quiz(Base):
     video_id = Column(Integer, ForeignKey("videos.id"), index=True, nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
     language = Column(String(10), nullable=False)
-    content = Column(Text, nullable=False)  # JSON stored as text
+    file_path = Column(String(500), nullable=False)  # Path to JSON file
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     # Relationships

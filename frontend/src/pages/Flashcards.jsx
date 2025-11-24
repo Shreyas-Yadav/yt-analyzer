@@ -60,6 +60,9 @@ const Flashcards = () => {
     const loadSavedFlashcards = async (flashcardId) => {
         setLoading(true);
         try {
+            // Add 3 second delay for testing loading animation
+            await new Promise(resolve => setTimeout(resolve, 3000));
+
             const user = AuthService.getUser();
             const userEmail = user ? user.email : 'anonymous';
             const response = await fetch(`http://localhost:8000/flashcards/${flashcardId}/content?user_id=${userEmail}`);
@@ -78,6 +81,35 @@ const Flashcards = () => {
             toast.error('Failed to load flashcards');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleDeleteFlashcard = async (flashcardId) => {
+        if (!window.confirm('Are you sure you want to delete this flashcard set?')) {
+            return;
+        }
+
+        try {
+            const user = AuthService.getUser();
+            const userEmail = user ? user.email : 'anonymous';
+            const response = await fetch(`http://localhost:8000/flashcards/${flashcardId}?user_id=${userEmail}`, {
+                method: 'DELETE',
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to delete flashcard set');
+            }
+
+            toast.success('Flashcard set deleted!');
+            // Refresh the list
+            await fetchSavedFlashcards();
+            // Clear current flashcards if we deleted the one being viewed
+            if (flashcards.length > 0) {
+                setFlashcards([]);
+            }
+        } catch (error) {
+            console.error('Error deleting flashcard:', error);
+            toast.error('Failed to delete flashcard set');
         }
     };
 
@@ -234,18 +266,31 @@ const Flashcards = () => {
                                 <h3 className="text-lg font-medium text-gray-900 mb-4">Saved Flashcards</h3>
                                 <div className="space-y-2">
                                     {savedFlashcards.map((fc) => (
-                                        <button
+                                        <div
                                             key={fc.id}
-                                            onClick={() => loadSavedFlashcards(fc.id)}
-                                            className="w-full text-left p-3 rounded-md border border-gray-200 hover:bg-gray-50 transition-colors flex justify-between items-center"
+                                            className="p-3 rounded-md border border-gray-200 hover:bg-gray-50 transition-colors flex justify-between items-center"
                                         >
-                                            <span className="font-medium text-gray-700">
-                                                {getLanguageName(fc.language)}
-                                            </span>
-                                            <span className="text-xs text-gray-500">
-                                                {new Date(fc.created_at).toLocaleDateString()}
-                                            </span>
-                                        </button>
+                                            <button
+                                                onClick={() => loadSavedFlashcards(fc.id)}
+                                                className="flex-1 text-left flex justify-between items-center"
+                                            >
+                                                <span className="font-medium text-gray-700">
+                                                    {getLanguageName(fc.language)}
+                                                </span>
+                                                <span className="text-xs text-gray-500">
+                                                    {new Date(fc.created_at).toLocaleDateString()}
+                                                </span>
+                                            </button>
+                                            <button
+                                                onClick={() => handleDeleteFlashcard(fc.id)}
+                                                className="ml-2 p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
+                                                title="Delete"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                            </button>
+                                        </div>
                                     ))}
                                 </div>
                             </div>
@@ -283,7 +328,16 @@ const Flashcards = () => {
                             </button>
                         </div>
 
-                        {flashcards.length > 0 && (
+                        {loading && (
+                            <div className="bg-white shadow rounded-lg p-12 text-center">
+                                <div className="flex flex-col items-center justify-center">
+                                    <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-600 mb-4"></div>
+                                    <p className="text-gray-600">Loading flashcards...</p>
+                                </div>
+                            </div>
+                        )}
+
+                        {!loading && flashcards.length > 0 && (
                             <div className="space-y-6">
                                 {/* Flashcard display area */}
                                 <div className="max-w-2xl mx-auto">
