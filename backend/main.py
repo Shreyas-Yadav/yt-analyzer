@@ -6,6 +6,7 @@ import sys
 import os
 import json
 import asyncio
+from typing import List, Optional
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
 
@@ -46,10 +47,81 @@ class TranslateRequest(BaseModel):
 class GenerateFlashcardsRequest(BaseModel):
     video_id: int
     language: str = "en"
-    user_id: str = "anonymous"
+    user_id: str
+
+class SaveFlashcardsRequest(BaseModel):
+    video_id: int
+    user_id: str
+    language: str
+    flashcards: List[dict]
 
 class UserLoginRequest(BaseModel):
     email: str
+
+@app.post("/flashcards/save")
+async def save_flashcards(request: SaveFlashcardsRequest, db: Session = Depends(get_db)):
+    try:
+        # 1. Save to File System
+        # Create directory structure: downloads/flashcards/{user_id}/{video_id}
+        base_dir = "downloads"
+        flashcards_dir = os.path.join(base_dir, "flashcards", str(request.user_id), str(request.video_id))
+        os.makedirs(flashcards_dir, exist_ok=True)
+
+        # File path: flashcards_{language}.json
+        filename = f"flashcards_{request.language}.json"
+        file_path = os.path.join(flashcards_dir, filename)
+
+        # Save to JSON file
+        with open(file_path, "w", encoding='utf-8') as f:
+            json.dump(request.flashcards, f, indent=4, ensure_ascii=False)
+
+        # 2. Save to Database
+        # Find user
+        user = db.query(User).filter(User.email == request.user_id).first()
+        if not user:
+            # Should we create user? Or fail? 
+            # For consistency with other endpoints, let's fail if user not found, 
+            # but the frontend sends the email from AuthService.
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Find video
+        video = db.query(Video).filter(Video.id == request.video_id, Video.user_id == user.id).first()
+        if not video:
+             raise HTTPException(status_code=404, detail="Video not found")
+
+        # Check if flashcards already exist for this video/language
+        existing_flashcard = db.query(Flashcard).filter(
+            Flashcard.video_id == video.id,
+            Flashcard.language == request.language
+        ).first()
+
+        if existing_flashcard:
+            # Update existing
+            existing_flashcard.file_path = file_path
+            existing_flashcard.created_at = datetime.datetime.utcnow() # Update timestamp
+            db.commit()
+            db.refresh(existing_flashcard)
+            print(f"Updated existing flashcards for video {video.id} lang {request.language}")
+        else:
+            # Create new
+            new_flashcard = Flashcard(
+                video_id=video.id,
+                user_id=user.id,
+                language=request.language,
+                file_path=file_path
+            )
+            db.add(new_flashcard)
+            db.commit()
+            db.refresh(new_flashcard)
+            print(f"Created new flashcards for video {video.id} lang {request.language}")
+
+        return {"message": "Flashcards saved successfully", "path": file_path}
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"Error saving flashcards: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/users/login")
 async def user_login(request: UserLoginRequest, db: Session = Depends(get_db)):
@@ -234,6 +306,39 @@ async def get_video_transcripts(video_id: int, user_id: str = "anonymous", db: S
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/videos/{video_id}/flashcards")
+async def get_video_flashcards(video_id: int, user_id: str = "anonymous", db: Session = Depends(get_db)):
+    """Get all saved flashcards for a specific video."""
+    try:
+        # Find user by email
+        user = db.query(User).filter(User.email == user_id).first()
+        if not user:
+            return {"flashcards": []}
+        
+        # Verify video belongs to user
+        video = db.query(Video).filter(Video.id == video_id, Video.user_id == user.id).first()
+        if not video:
+            raise HTTPException(status_code=404, detail="Video not found")
+        
+        # Get all flashcards for this video
+        flashcards = db.query(Flashcard).filter(Flashcard.video_id == video_id).all()
+        
+        return {
+            "flashcards": [
+                {
+                    "id": fc.id,
+                    "language": fc.language,
+                    "file_path": fc.file_path,
+                    "created_at": fc.created_at
+                }
+                for fc in flashcards
+            ]
+        }
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.delete("/videos/{video_id}")
 async def delete_video(video_id: int, user_id: str = "anonymous", db: Session = Depends(get_db)):
     try:
@@ -368,6 +473,34 @@ async def generate_flashcards(request: GenerateFlashcardsRequest, db: Session = 
         raise HTTPException(status_code=500, detail=str(ve))
     except Exception as e:
         print(f"Flashcard generation error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/flashcards/{flashcard_id}/content")
+async def get_flashcard_content(flashcard_id: int, user_id: str = "anonymous", db: Session = Depends(get_db)):
+    try:
+        # Find user
+        user = db.query(User).filter(User.email == user_id).first()
+        if not user:
+             raise HTTPException(status_code=404, detail="User not found")
+
+        # Find flashcard
+        flashcard = db.query(Flashcard).filter(Flashcard.id == flashcard_id, Flashcard.user_id == user.id).first()
+        if not flashcard:
+            raise HTTPException(status_code=404, detail="Flashcard set not found")
+
+        # Read file content
+        if not os.path.exists(flashcard.file_path):
+             raise HTTPException(status_code=404, detail="Flashcard file not found on server")
+
+        with open(flashcard.file_path, "r", encoding='utf-8') as f:
+            content = json.load(f)
+
+        return {"flashcards": content}
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"Error reading flashcard content: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health")

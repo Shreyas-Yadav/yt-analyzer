@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import LanguageSelector from '../components/LanguageSelector';
+
 import TranscriptSidebar from '../components/TranscriptSidebar';
 import { AuthService } from '../services/AuthService';
 
@@ -14,11 +14,9 @@ const Flashcards = () => {
     const [loading, setLoading] = useState(false);
     const [currentCardIndex, setCurrentCardIndex] = useState(0);
     const [isFlipped, setIsFlipped] = useState(false);
+    const [savedFlashcards, setSavedFlashcards] = useState([]);
 
-    useEffect(() => {
-        // Fetch video details
-        fetchVideoDetails();
-    }, [videoId]);
+    console.log('Rendering Flashcards component', { videoId, savedFlashcards });
 
     const fetchVideoDetails = async () => {
         try {
@@ -35,6 +33,54 @@ const Flashcards = () => {
         }
     };
 
+    const fetchSavedFlashcards = async () => {
+        try {
+            const user = AuthService.getUser();
+            const userEmail = user ? user.email : 'anonymous';
+            const response = await fetch(`http://localhost:8000/videos/${videoId}/flashcards?user_id=${userEmail}`);
+            if (response.ok) {
+                const data = await response.json();
+                console.log('Fetched saved flashcards:', data);
+                setSavedFlashcards(data.flashcards || []);
+            }
+        } catch (error) {
+            console.error('Error fetching saved flashcards:', error);
+        }
+    };
+
+    useEffect(() => {
+        if (videoId) {
+            // Fetch video details
+            fetchVideoDetails();
+            // Fetch saved flashcards
+            fetchSavedFlashcards();
+        }
+    }, [videoId]);
+
+    const loadSavedFlashcards = async (flashcardId) => {
+        setLoading(true);
+        try {
+            const user = AuthService.getUser();
+            const userEmail = user ? user.email : 'anonymous';
+            const response = await fetch(`http://localhost:8000/flashcards/${flashcardId}/content?user_id=${userEmail}`);
+
+            if (!response.ok) {
+                throw new Error('Failed to load flashcards');
+            }
+
+            const data = await response.json();
+            setFlashcards(data.flashcards);
+            setCurrentCardIndex(0);
+            setIsFlipped(false);
+            toast.success('Loaded saved flashcards!');
+        } catch (error) {
+            console.error('Error loading flashcards:', error);
+            toast.error('Failed to load flashcards');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const handleGenerateFlashcards = async () => {
         if (!selectedTranscript) {
             toast.error('Please select a transcript first');
@@ -47,21 +93,6 @@ const Flashcards = () => {
         try {
             const user = AuthService.getUser();
             const userEmail = user ? user.email : 'anonymous';
-
-            // First ensure we have the transcript in the desired language
-            // If it's not English, we might need to translate first, but the backend handles fallback.
-            // However, for better UX, let's just call the generate endpoint directly.
-            // The backend logic I wrote tries to find the transcript in the requested language,
-            // and falls back to the original if not found. 
-            // Ideally, we should trigger translation if needed, but let's assume the user 
-            // might have already translated it or the backend will handle it (which it does partially).
-
-            // Actually, looking at my backend code, it just reads the file. 
-            // It doesn't auto-translate if missing. 
-            // So if I select 'es' and only have 'en', it might fail or use 'en' depending on fallback logic.
-            // My backend fallback logic: if specific lang not found, use *any* transcript (likely original).
-            // Then it generates flashcards using that transcript text, but passes 'es' as target language to LLM.
-            // So the LLM will generate Spanish flashcards from English text. This is actually perfect!
 
             const response = await fetch('http://localhost:8000/flashcards/generate', {
                 method: 'POST',
@@ -103,6 +134,40 @@ const Flashcards = () => {
         }
     };
 
+    const handleSaveFlashcards = async () => {
+        if (flashcards.length === 0) {
+            toast.error('No flashcards to save');
+            return;
+        }
+
+        try {
+            const user = AuthService.getUser();
+            const userEmail = user ? user.email : 'anonymous';
+
+            const response = await fetch('http://localhost:8000/flashcards/save', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    video_id: parseInt(videoId),
+                    user_id: userEmail,
+                    language: selectedTranscript.language,
+                    flashcards: flashcards
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to save flashcards');
+            }
+
+            toast.success('Flashcards saved successfully!');
+        } catch (error) {
+            console.error('Error saving flashcards:', error);
+            toast.error('Failed to save flashcards');
+        }
+    };
+
     const handleFlip = () => {
         setIsFlipped(!isFlipped);
     };
@@ -118,6 +183,14 @@ const Flashcards = () => {
         if (currentCardIndex > 0) {
             setCurrentCardIndex(currentCardIndex - 1);
             setIsFlipped(false);
+        }
+    };
+
+    const getLanguageName = (code) => {
+        try {
+            return new Intl.DisplayNames(['en'], { type: 'language' }).of(code);
+        } catch (error) {
+            return code;
         }
     };
 
@@ -143,13 +216,41 @@ const Flashcards = () => {
 
             <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
                 <div className="flex gap-6">
-                    {/* Sidebar */}
-                    <TranscriptSidebar
-                        videoId={videoId}
-                        userEmail={AuthService.getUser()?.email || 'anonymous'}
-                        onSelect={setSelectedTranscript}
-                        selectedTranscriptId={selectedTranscript?.id}
-                    />
+                    {/* Sidebar - Show if no flashcards loaded OR if we want to show saved list */}
+                    {flashcards.length === 0 && (
+                        <div className="w-1/3 space-y-6">
+                            {/* Transcript Selection */}
+                            <TranscriptSidebar
+                                videoId={videoId}
+                                userEmail={AuthService.getUser()?.email || 'anonymous'}
+                                onSelect={setSelectedTranscript}
+                                selectedTranscriptId={selectedTranscript?.id}
+                            />
+
+                            {/* Saved Flashcards List */}
+                            {Array.isArray(savedFlashcards) && savedFlashcards.length > 0 && (
+                                <div className="bg-white shadow rounded-lg p-4">
+                                    <h3 className="text-lg font-medium text-gray-900 mb-4">Saved Flashcards</h3>
+                                    <div className="space-y-2">
+                                        {savedFlashcards.map((fc) => (
+                                            <button
+                                                key={fc.id}
+                                                onClick={() => loadSavedFlashcards(fc.id)}
+                                                className="w-full text-left p-3 rounded-md border border-gray-200 hover:bg-gray-50 transition-colors flex justify-between items-center"
+                                            >
+                                                <span className="font-medium text-gray-700">
+                                                    {getLanguageName(fc.language)}
+                                                </span>
+                                                <span className="text-xs text-gray-500">
+                                                    {new Date(fc.created_at).toLocaleDateString()}
+                                                </span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     {/* Main Content */}
                     <div className="flex-1 px-4 py-6 sm:px-0">
@@ -169,7 +270,7 @@ const Flashcards = () => {
                                 <p className="text-gray-600 mb-6">
                                     {selectedTranscript
                                         ? `Generate flashcards from the ${selectedTranscript.language} transcript`
-                                        : "Select a transcript from the sidebar to start"}
+                                        : "Select a transcript or load a saved set"}
                                 </p>
 
                                 <button
@@ -186,12 +287,20 @@ const Flashcards = () => {
                                 <div className="max-w-2xl mx-auto">
                                     <div className="mb-4 flex justify-between items-center text-sm text-gray-500">
                                         <span>Card {currentCardIndex + 1} of {flashcards.length}</span>
-                                        <button
-                                            onClick={() => setFlashcards([])}
-                                            className="text-indigo-600 hover:text-indigo-800"
-                                        >
-                                            Generate New
-                                        </button>
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={handleSaveFlashcards}
+                                                className="text-indigo-600 hover:text-indigo-800 font-medium"
+                                            >
+                                                Save Flashcards
+                                            </button>
+                                            <button
+                                                onClick={() => setFlashcards([])}
+                                                className="text-gray-600 hover:text-gray-800"
+                                            >
+                                                Generate New
+                                            </button>
+                                        </div>
                                     </div>
 
                                     <div
