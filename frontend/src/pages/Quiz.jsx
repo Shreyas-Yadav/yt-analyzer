@@ -9,7 +9,7 @@ const Quiz = () => {
     const { videoId } = useParams();
     const navigate = useNavigate();
     const [videoTitle, setVideoTitle] = useState('');
-    const [selectedLanguage, setSelectedLanguage] = useState('en');
+    const [selectedTranscript, setSelectedTranscript] = useState(null);
     const [quiz, setQuiz] = useState(null);
     const [loading, setLoading] = useState(false);
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -37,8 +37,13 @@ const Quiz = () => {
     };
 
     const handleGenerateQuiz = async () => {
+        if (!selectedTranscript) {
+            toast.error('Please select a transcript first');
+            return;
+        }
+
         setLoading(true);
-        toast.loading(`Generating quiz in ${selectedLanguage}...`);
+        toast.loading(`Generating quiz in ${selectedTranscript.language}...`);
 
         try {
             // Always call translate API to handle non-English videos
@@ -52,7 +57,7 @@ const Quiz = () => {
                 },
                 body: JSON.stringify({
                     video_id: parseInt(videoId),
-                    target_language: selectedLanguage,
+                    target_language: selectedTranscript.language,
                     user_id: userEmail
                 }),
             });
@@ -105,6 +110,8 @@ const Quiz = () => {
                     <TranscriptSidebar
                         videoId={videoId}
                         userEmail={AuthService.getUser()?.email || 'anonymous'}
+                        onSelect={setSelectedTranscript}
+                        selectedTranscriptId={selectedTranscript?.id}
                     />
 
                     {/* Main Content */}
@@ -122,20 +129,16 @@ const Quiz = () => {
                                     </svg>
                                 </div>
                                 <h3 className="text-lg font-medium text-gray-900 mb-2">No quiz yet</h3>
-                                <p className="text-gray-600 mb-6">Select a language and click the button below to generate a quiz from the transcript</p>
-
-                                <div className="mb-6 flex justify-center">
-                                    <LanguageSelector
-                                        selectedLanguage={selectedLanguage}
-                                        onLanguageChange={setSelectedLanguage}
-                                        disabled={loading}
-                                    />
-                                </div>
+                                <p className="text-gray-600 mb-6">
+                                    {selectedTranscript
+                                        ? `Generate quiz from the ${selectedTranscript.language} transcript`
+                                        : "Select a transcript from the sidebar to start"}
+                                </p>
 
                                 <button
                                     onClick={handleGenerateQuiz}
-                                    disabled={loading}
-                                    className="bg-indigo-600 text-white px-6 py-3 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400"
+                                    disabled={loading || !selectedTranscript}
+                                    className="bg-indigo-600 text-white px-6 py-3 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
                                 >
                                     {loading ? 'Generating...' : '✏️ Generate Quiz'}
                                 </button>

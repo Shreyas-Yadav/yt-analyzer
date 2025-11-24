@@ -7,12 +7,17 @@ import os
 import json
 import asyncio
 from sqlalchemy.orm import Session
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Add the src directory to the python path
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
 from downloader.video_downloader import VideoDownloader
 from translator.translator import Translator
+from generator.flashcard_generator import FlashcardGenerator
 from database import init_db, get_db, Video, User, Transcript, Flashcard, Quiz
 
 app = FastAPI()
@@ -36,6 +41,11 @@ class VideoRequest(BaseModel):
 class TranslateRequest(BaseModel):
     video_id: int
     target_language: str
+    user_id: str = "anonymous"
+
+class GenerateFlashcardsRequest(BaseModel):
+    video_id: int
+    language: str = "en"
     user_id: str = "anonymous"
 
 class UserLoginRequest(BaseModel):
@@ -303,10 +313,61 @@ async def translate_video(request: TranslateRequest, db: Session = Depends(get_d
             "language": request.target_language
         }
         
-    except HTTPException as he:
-        raise he
     except Exception as e:
         print(f"Translation error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/flashcards/generate")
+async def generate_flashcards(request: GenerateFlashcardsRequest, db: Session = Depends(get_db)):
+    try:
+        # Find user by email
+        user = db.query(User).filter(User.email == request.user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Get video from DB
+        video = db.query(Video).filter(Video.id == request.video_id, Video.user_id == user.id).first()
+        if not video:
+            raise HTTPException(status_code=404, detail="Video not found")
+            
+        # Get transcript (prefer requested language, fallback to original)
+        transcript = db.query(Transcript).filter(
+            Transcript.video_id == video.id,
+            Transcript.language == request.language
+        ).first()
+        
+        if not transcript:
+            # Fallback to any transcript if specific language not found
+            # Ideally we should translate first, but for now let's just use what we have
+            # or maybe we should error out? The user flow implies they selected a language.
+            # Let's try to find the original one.
+             transcript = db.query(Transcript).filter(
+                Transcript.video_id == video.id
+            ).order_by(Transcript.created_at).first()
+             
+        if not transcript:
+             raise HTTPException(status_code=404, detail="No transcript found for this video")
+
+        transcript_path = transcript.file_path
+        if not os.path.exists(transcript_path):
+             raise HTTPException(status_code=404, detail=f"Transcript file not found at {transcript_path}")
+
+        with open(transcript_path, 'r', encoding='utf-8') as f:
+            transcript_text = f.read()
+
+        # Generate flashcards
+        generator = FlashcardGenerator()
+        flashcards = generator.generate_flashcards(transcript_text, request.language)
+        
+        # Save to database (optional, but good for caching)
+        # For now, just return them
+        
+        return {"flashcards": [fc.dict() for fc in flashcards]}
+
+    except ValueError as ve:
+        raise HTTPException(status_code=500, detail=str(ve))
+    except Exception as e:
+        print(f"Flashcard generation error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health")

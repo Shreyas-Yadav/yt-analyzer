@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-const TranscriptSidebar = ({ videoId, userEmail }) => {
+const TranscriptSidebar = ({ videoId, userEmail, onSelect, selectedTranscriptId }) => {
     const [transcripts, setTranscripts] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -65,7 +65,11 @@ const TranscriptSidebar = ({ videoId, userEmail }) => {
                     {transcripts.map((transcript) => (
                         <li
                             key={transcript.id}
-                            className="p-3 bg-gray-50 rounded-md border border-gray-200 hover:bg-indigo-50 hover:border-indigo-300 transition-colors"
+                            onClick={() => onSelect && onSelect(transcript)}
+                            className={`p-3 rounded-md border cursor-pointer transition-colors ${selectedTranscriptId === transcript.id
+                                    ? 'bg-indigo-50 border-indigo-500 ring-1 ring-indigo-500'
+                                    : 'bg-gray-50 border-gray-200 hover:bg-indigo-50 hover:border-indigo-300'
+                                }`}
                         >
                             <div className="font-medium text-gray-900 text-sm">
                                 {getLanguageName(transcript.language)}
