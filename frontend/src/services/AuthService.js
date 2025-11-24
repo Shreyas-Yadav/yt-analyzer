@@ -5,6 +5,7 @@ import {
     ConfirmSignUpCommand,
     GlobalSignOutCommand
 } from "@aws-sdk/client-cognito-identity-provider";
+import { API_BASE_URL } from '../config/api';
 
 const userPoolId = import.meta.env.VITE_COGNITO_USER_POOL_ID;
 const region = import.meta.env.VITE_AWS_REGION || (userPoolId ? userPoolId.split('_')[0] : 'us-east-1');
@@ -40,7 +41,7 @@ export const AuthService = {
 
     async ensureUserInDatabase(email) {
         try {
-            const response = await fetch('http://localhost:8000/users/login', {
+            const response = await fetch(`${API_BASE_URL}/users/login`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

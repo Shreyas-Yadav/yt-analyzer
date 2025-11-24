@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 
 import TranscriptSidebar from '../components/TranscriptSidebar';
 import { AuthService } from '../services/AuthService';
+import { API_BASE_URL } from '../config/api';
 
 const Flashcards = () => {
     const { videoId } = useParams();
@@ -16,13 +17,11 @@ const Flashcards = () => {
     const [isFlipped, setIsFlipped] = useState(false);
     const [savedFlashcards, setSavedFlashcards] = useState([]);
 
-    console.log('Rendering Flashcards component', { videoId, savedFlashcards });
-
     const fetchVideoDetails = async () => {
         try {
             const user = AuthService.getUser();
             const userEmail = user ? user.email : 'anonymous';
-            const response = await fetch(`http://localhost:8000/videos?user_id=${userEmail}`);
+            const response = await fetch(`${API_BASE_URL}/videos?user_id=${userEmail}`);
             const data = await response.json();
             const video = data.videos.find(v => v.id === parseInt(videoId));
             if (video) {
@@ -37,10 +36,9 @@ const Flashcards = () => {
         try {
             const user = AuthService.getUser();
             const userEmail = user ? user.email : 'anonymous';
-            const response = await fetch(`http://localhost:8000/videos/${videoId}/flashcards?user_id=${userEmail}`);
+            const response = await fetch(`${API_BASE_URL}/videos/${videoId}/flashcards?user_id=${userEmail}`);
             if (response.ok) {
                 const data = await response.json();
-                console.log('Fetched saved flashcards:', data);
                 setSavedFlashcards(data.flashcards || []);
             }
         } catch (error) {
@@ -65,7 +63,7 @@ const Flashcards = () => {
 
             const user = AuthService.getUser();
             const userEmail = user ? user.email : 'anonymous';
-            const response = await fetch(`http://localhost:8000/flashcards/${flashcardId}/content?user_id=${userEmail}`);
+            const response = await fetch(`${API_BASE_URL}/flashcards/${flashcardId}/content?user_id=${userEmail}`);
 
             if (!response.ok) {
                 throw new Error('Failed to load flashcards');
@@ -92,7 +90,7 @@ const Flashcards = () => {
         try {
             const user = AuthService.getUser();
             const userEmail = user ? user.email : 'anonymous';
-            const response = await fetch(`http://localhost:8000/flashcards/${flashcardId}?user_id=${userEmail}`, {
+            const response = await fetch(`${API_BASE_URL}/flashcards/${flashcardId}?user_id=${userEmail}`, {
                 method: 'DELETE',
             });
 
@@ -126,7 +124,7 @@ const Flashcards = () => {
             const user = AuthService.getUser();
             const userEmail = user ? user.email : 'anonymous';
 
-            const response = await fetch('http://localhost:8000/flashcards/generate', {
+            const response = await fetch(`${API_BASE_URL}/flashcards/generate`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -144,7 +142,6 @@ const Flashcards = () => {
             }
 
             const data = await response.json();
-            console.log('Flashcards generated:', data);
 
             if (data.flashcards && data.flashcards.length > 0) {
                 setFlashcards(data.flashcards);
@@ -176,7 +173,7 @@ const Flashcards = () => {
             const user = AuthService.getUser();
             const userEmail = user ? user.email : 'anonymous';
 
-            const response = await fetch('http://localhost:8000/flashcards/save', {
+            const response = await fetch(`${API_BASE_URL}/flashcards/save`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

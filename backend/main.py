@@ -516,14 +516,6 @@ async def get_flashcard_content(flashcard_id: int, user_id: str = "anonymous", d
         print(f"Error reading flashcard content: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-        return {"flashcards": content}
-
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        print(f"Error reading flashcard content: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
 # ==================== QUIZ ENDPOINTS ====================
 
 @app.post("/quiz/generate")

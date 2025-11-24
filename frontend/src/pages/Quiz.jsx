@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import TranscriptSidebar from '../components/TranscriptSidebar';
 import { AuthService } from '../services/AuthService';
+import { API_BASE_URL } from '../config/api';
 
 const Quiz = () => {
     const { videoId } = useParams();
@@ -16,13 +17,11 @@ const Quiz = () => {
     const [showResults, setShowResults] = useState(false);
     const [savedQuizzes, setSavedQuizzes] = useState([]);
 
-    console.log('Rendering Quiz component', { videoId, savedQuizzes });
-
     const fetchVideoDetails = async () => {
         try {
             const user = AuthService.getUser();
             const userEmail = user ? user.email : 'anonymous';
-            const response = await fetch(`http://localhost:8000/videos?user_id=${userEmail}`);
+            const response = await fetch(`${API_BASE_URL}/videos?user_id=${userEmail}`);
             const data = await response.json();
             const video = data.videos.find(v => v.id === parseInt(videoId));
             if (video) {
@@ -37,10 +36,9 @@ const Quiz = () => {
         try {
             const user = AuthService.getUser();
             const userEmail = user ? user.email : 'anonymous';
-            const response = await fetch(`http://localhost:8000/videos/${videoId}/quizzes?user_id=${userEmail}`);
+            const response = await fetch(`${API_BASE_URL}/videos/${videoId}/quizzes?user_id=${userEmail}`);
             if (response.ok) {
                 const data = await response.json();
-                console.log('Fetched saved quizzes:', data);
                 setSavedQuizzes(data.quizzes || []);
             }
         } catch (error) {
@@ -63,7 +61,7 @@ const Quiz = () => {
 
             const user = AuthService.getUser();
             const userEmail = user ? user.email : 'anonymous';
-            const response = await fetch(`http://localhost:8000/quiz/${quizId}/content?user_id=${userEmail}`);
+            const response = await fetch(`${API_BASE_URL}/quiz/${quizId}/content?user_id=${userEmail}`);
 
             if (!response.ok) {
                 throw new Error('Failed to load quiz');
@@ -96,7 +94,7 @@ const Quiz = () => {
             const user = AuthService.getUser();
             const userEmail = user ? user.email : 'anonymous';
 
-            const response = await fetch('http://localhost:8000/quiz/generate', {
+            const response = await fetch(`${API_BASE_URL}/quiz/generate`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -114,7 +112,6 @@ const Quiz = () => {
             }
 
             const data = await response.json();
-            console.log('Quiz generated:', data);
 
             if (data.quiz && data.quiz.length > 0) {
                 setQuiz(data.quiz);
@@ -147,7 +144,7 @@ const Quiz = () => {
             const user = AuthService.getUser();
             const userEmail = user ? user.email : 'anonymous';
 
-            const response = await fetch('http://localhost:8000/quiz/save', {
+            const response = await fetch(`${API_BASE_URL}/quiz/save`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -181,7 +178,7 @@ const Quiz = () => {
         try {
             const user = AuthService.getUser();
             const userEmail = user ? user.email : 'anonymous';
-            const response = await fetch(`http://localhost:8000/quiz/${quizId}?user_id=${userEmail}`, {
+            const response = await fetch(`${API_BASE_URL}/quiz/${quizId}?user_id=${userEmail}`, {
                 method: 'DELETE',
             });
 

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../config/api';
 
 const TranscriptSidebar = ({ videoId, userEmail, onSelect, selectedTranscriptId }) => {
     const [transcripts, setTranscripts] = useState([]);
@@ -12,7 +13,7 @@ const TranscriptSidebar = ({ videoId, userEmail, onSelect, selectedTranscriptId 
         try {
             setLoading(true);
             const response = await fetch(
-                `http://localhost:8000/videos/${videoId}/transcripts?user_id=${userEmail}`
+                `${API_BASE_URL}/videos/${videoId}/transcripts?user_id=${userEmail}`
             );
             const data = await response.json();
             setTranscripts(data.transcripts || []);

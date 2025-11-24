@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AuthService } from '../services/AuthService';
 import YouTubeInput from '../components/YouTubeInput';
 import toast from 'react-hot-toast';
+import { API_BASE_URL } from '../config/api';
 
 const Dashboard = () => {
     const [userEmail, setUserEmail] = useState('');
@@ -15,7 +16,7 @@ const Dashboard = () => {
     const fetchVideos = async () => {
         if (!userEmail) return;
         try {
-            const response = await fetch(`http://localhost:8000/videos?user_id=${userEmail}`);
+            const response = await fetch(`${API_BASE_URL}/videos?user_id=${userEmail}`);
             if (response.ok) {
                 const data = await response.json();
                 setVideos(data.videos);
@@ -26,19 +27,17 @@ const Dashboard = () => {
     };
 
     const handleUrlSubmit = async (url) => {
-        console.log('Submitted URL:', url);
         setProcessing(true);
 
         // Create EventSource for Server-Sent Events
         const eventSource = new EventSource(
-            `http://localhost:8000/analyze?${new URLSearchParams({ url, user_id: userEmail })}`,
+            `${API_BASE_URL}/analyze?${new URLSearchParams({ url, user_id: userEmail })}`,
             { withCredentials: false }
         );
 
         // Handle incoming messages
         eventSource.onmessage = (event) => {
             const data = JSON.parse(event.data);
-            console.log('SSE Event:', data);
 
             if (data.stage === 1) {
                 setCurrentStage('Stage 1/3: Downloading video...');
@@ -72,7 +71,7 @@ const Dashboard = () => {
         if (!confirm('Are you sure you want to delete this video and all related files?')) return;
 
         try {
-            const response = await fetch(`http://localhost:8000/videos/${videoId}?user_id=${userEmail}`, {
+            const response = await fetch(`${API_BASE_URL}/videos/${videoId}?user_id=${userEmail}`, {
                 method: 'DELETE',
             });
 

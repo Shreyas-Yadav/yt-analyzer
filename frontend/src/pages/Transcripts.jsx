@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import LanguageSelector from '../components/LanguageSelector';
 import { AuthService } from '../services/AuthService';
+import { API_BASE_URL } from '../config/api';
 
 const Transcripts = () => {
     const { videoId } = useParams();
@@ -22,7 +23,7 @@ const Transcripts = () => {
         try {
             const user = AuthService.getUser();
             const userEmail = user ? user.email : 'anonymous';
-            const response = await fetch(`http://localhost:8000/videos?user_id=${userEmail}`);
+            const response = await fetch(`${API_BASE_URL}/videos?user_id=${userEmail}`);
             const data = await response.json();
             const video = data.videos.find(v => v.id === parseInt(videoId));
             if (video) {
@@ -39,7 +40,7 @@ const Transcripts = () => {
             const user = AuthService.getUser();
             const userEmail = user ? user.email : 'anonymous';
             const response = await fetch(
-                `http://localhost:8000/videos/${videoId}/transcripts?user_id=${userEmail}`
+                `${API_BASE_URL}/videos/${videoId}/transcripts?user_id=${userEmail}`
             );
             const data = await response.json();
             setTranscripts(data.transcripts || []);
@@ -65,7 +66,7 @@ const Transcripts = () => {
         try {
             const user = AuthService.getUser();
             const userEmail = user ? user.email : 'anonymous';
-            const response = await fetch('http://localhost:8000/translate', {
+            const response = await fetch(`${API_BASE_URL}/translate`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -82,8 +83,6 @@ const Transcripts = () => {
             }
 
             const data = await response.json();
-            console.log('Translation result:', data);
-            toast.dismiss();
             toast.success(`Transcript translated to ${selectedLanguage}`);
 
             // Refresh transcripts list
@@ -201,8 +200,8 @@ const Transcripts = () => {
                                                 {isOriginalTranscript(transcript, transcripts) ? '🎬' : '🌍'}
                                             </span>
                                             <span className={`px-2 py-1 text-xs rounded-full ${isOriginalTranscript(transcript, transcripts)
-                                                    ? 'bg-blue-100 text-blue-800'
-                                                    : 'bg-green-100 text-green-800'
+                                                ? 'bg-blue-100 text-blue-800'
+                                                : 'bg-green-100 text-green-800'
                                                 }`}>
                                                 {isOriginalTranscript(transcript, transcripts) ? 'Original' : 'Translation'}
                                             </span>
