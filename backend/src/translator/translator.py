@@ -40,91 +40,80 @@ class Translator:
             print(f"Translating {transcript_path} to {target_lang}...")
             
             with open(transcript_path, 'r', encoding='utf-8') as f:
-                lines = f.readlines()
+                content = f.read()
             
-            translated_lines = []
-            text_to_translate = []
-            line_indices_map = [] # Tuples of (line_index, type, extra_data)
+            # Split by the header separator
+            parts = content.split("=" * 80)
             
-            # Types: 
-            # 0: Plain line (header/separator/empty) - No translation
-            # 1: Timestamped line - Translate text part
-            # 2: Full text line - Translate whole line
-            
-            for i, line in enumerate(lines):
-                line = line.strip()
-                if not line:
-                    line_indices_map.append((i, 0, None))
-                    continue
+            if len(parts) >= 2:
+                # Extract header and main text
+                header = parts[0] + "=" * 80
+                main_text = parts[1].strip()
                 
-                if line.startswith("Transcript:") or line.startswith("=") or line.startswith("-") or line == "Full Text:" or line == "Timestamped Segments:":
-                    line_indices_map.append((i, 0, None))
-                    continue
+                # Translate the main text content
+                translator = GoogleTranslator(source='auto', target=target_lang)
                 
-                # Check for timestamp: [0.00s - 5.00s] Text
-                if line.startswith("[") and "s]" in line:
+                # Split into paragraphs to handle better
+                raw_paragraphs = [p.strip() for p in main_text.split('\n') if p.strip()]
+                
+                # Further split long paragraphs if needed
+                paragraphs = []
+                MAX_CHUNK_SIZE = 4500
+                
+                for p in raw_paragraphs:
+                    if len(p) <= MAX_CHUNK_SIZE:
+                        paragraphs.append(p)
+                    else:
+                        # Split by sentences (simple approximation)
+                        sentences = p.replace('. ', '.|').replace('? ', '?|').replace('! ', '!|').split('|')
+                        current_chunk = ""
+                        
+                        for sentence in sentences:
+                            # If a single sentence is too long, force split it
+                            if len(sentence) > MAX_CHUNK_SIZE:
+                                # Split by character count
+                                for i in range(0, len(sentence), MAX_CHUNK_SIZE):
+                                    sub_chunk = sentence[i:i+MAX_CHUNK_SIZE]
+                                    if len(current_chunk) + len(sub_chunk) < MAX_CHUNK_SIZE:
+                                        current_chunk += sub_chunk
+                                    else:
+                                        if current_chunk:
+                                            paragraphs.append(current_chunk.strip())
+                                        current_chunk = sub_chunk
+                            else:
+                                if len(current_chunk) + len(sentence) < MAX_CHUNK_SIZE:
+                                    current_chunk += sentence + " "
+                                else:
+                                    if current_chunk:
+                                        paragraphs.append(current_chunk.strip())
+                                    current_chunk = sentence + " "
+                                
+                        if current_chunk:
+                            paragraphs.append(current_chunk.strip())
+                
+                translated_paragraphs = []
+                batch_size = 50
+                
+                # Process in batches
+                for i in range(0, len(paragraphs), batch_size):
+                    batch = paragraphs[i:i+batch_size]
                     try:
-                        parts = line.split("] ", 1)
-                        if len(parts) == 2:
-                            timestamp_part = parts[0] + "] "
-                            text_part = parts[1]
-                            text_to_translate.append(text_part)
-                            line_indices_map.append((i, 1, timestamp_part))
-                        else:
-                            line_indices_map.append((i, 0, None))
-                    except:
-                        line_indices_map.append((i, 0, None))
-                else:
-                    # Assume it's a text line (e.g. in Full Text section)
-                    # Skip very long lines to avoid errors, or try to translate them
-                    if len(line) < 4500:
-                        text_to_translate.append(line)
-                        line_indices_map.append((i, 2, None))
-                    else:
-                        # Too long, keep original
-                        line_indices_map.append((i, 0, None))
-
-            # Perform batch translation
-            translator = GoogleTranslator(source='auto', target=target_lang)
-            translated_texts = []
-            
-            # Chunking to avoid limits (e.g. 50 items per batch)
-            batch_size = 50
-            for i in range(0, len(text_to_translate), batch_size):
-                batch = text_to_translate[i:i+batch_size]
-                try:
-                    results = translator.translate_batch(batch)
-                    translated_texts.extend(results)
-                    print(f"Translated batch {i//batch_size + 1}/{(len(text_to_translate)-1)//batch_size + 1}")
-                except Exception as e:
-                    print(f"Error translating batch {i}: {e}")
-                    # Fallback: keep original for this batch
-                    translated_texts.extend(batch)
-
-            # Reconstruct lines
-            translation_idx = 0
-            for i, type, extra in line_indices_map:
-                original_line = lines[i]
-                if type == 0:
-                    translated_lines.append(original_line)
-                elif type == 1: # Timestamped
-                    timestamp_part = extra
-                    if translation_idx < len(translated_texts):
-                        translated_text = translated_texts[translation_idx]
-                        translated_lines.append(f"{timestamp_part}{translated_text}\n")
-                        translation_idx += 1
-                    else:
-                        translated_lines.append(original_line)
-                elif type == 2: # Full text
-                    if translation_idx < len(translated_texts):
-                        translated_text = translated_texts[translation_idx]
-                        translated_lines.append(f"{translated_text}\n")
-                        translation_idx += 1
-                    else:
-                        translated_lines.append(original_line)
+                        results = translator.translate_batch(batch)
+                        translated_paragraphs.extend(results)
+                    except Exception as e:
+                        print(f"Error translating batch {i}: {e}")
+                        # Fallback: keep original for this batch
+                        translated_paragraphs.extend(batch)
+                
+                # Reconstruct the file
+                translated_content = header + "\n\n" + "\n".join(translated_paragraphs) + "\n"
+            else:
+                # Fallback: translate entire content
+                translator = GoogleTranslator(source='auto', target=target_lang)
+                translated_content = translator.translate(content)
 
             with open(new_path, 'w', encoding='utf-8') as f:
-                f.writelines(translated_lines)
+                f.write(translated_content)
                 
             print(f"Translation saved to: {new_path}")
             return new_path

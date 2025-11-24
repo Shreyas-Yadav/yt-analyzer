@@ -95,7 +95,7 @@ class VideoDownloader:
             
             # Transcribe audio
             print(f"Transcribing audio: {audio_path}")
-            result = model.transcribe(audio_path, fp16=False)
+            result = model.transcribe(audio_path)
             
             # Construct transcript filename
             if video_title:
@@ -106,24 +106,12 @@ class VideoDownloader:
             
             transcript_path = os.path.join(self.transcripts_dir, transcript_filename)
             
-            # Format transcript with timestamps
+            # Write transcript with only plain text (no timestamps)
             with open(transcript_path, 'w', encoding='utf-8') as f:
                 f.write(f"Transcript: {video_title or 'Unknown'}\n")
                 f.write("=" * 80 + "\n\n")
-                
-                # Write full text
-                f.write("Full Text:\n")
-                f.write("-" * 80 + "\n")
-                f.write(result['text'].strip() + "\n\n")
-                
-                # Write segments with timestamps
-                f.write("\nTimestamped Segments:\n")
-                f.write("-" * 80 + "\n")
-                for segment in result['segments']:
-                    start = segment['start']
-                    end = segment['end']
-                    text = segment['text'].strip()
-                    f.write(f"[{start:.2f}s - {end:.2f}s] {text}\n")
+                f.write(result['text'].strip() + "\n")
+
             
             print(f"Transcript saved to: {transcript_path}")
             return transcript_path
