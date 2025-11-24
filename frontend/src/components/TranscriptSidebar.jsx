@@ -49,7 +49,7 @@ const TranscriptSidebar = ({ videoId, userEmail, onSelect, selectedTranscriptId 
     };
 
     return (
-        <div className="w-64 bg-white shadow-lg rounded-lg p-4">
+        <div className="w-full bg-white shadow-lg rounded-lg p-4">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">
                 📝 Available Transcripts
             </h3>
@@ -67,8 +67,8 @@ const TranscriptSidebar = ({ videoId, userEmail, onSelect, selectedTranscriptId 
                             key={transcript.id}
                             onClick={() => onSelect && onSelect(transcript)}
                             className={`p-3 rounded-md border cursor-pointer transition-colors ${selectedTranscriptId === transcript.id
-                                    ? 'bg-indigo-50 border-indigo-500 ring-1 ring-indigo-500'
-                                    : 'bg-gray-50 border-gray-200 hover:bg-indigo-50 hover:border-indigo-300'
+                                ? 'bg-indigo-50 border-indigo-500 ring-1 ring-indigo-500'
+                                : 'bg-gray-50 border-gray-200 hover:bg-indigo-50 hover:border-indigo-300'
                                 }`}
                         >
                             <div className="font-medium text-gray-900 text-sm">

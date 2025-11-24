@@ -162,6 +162,8 @@ const Flashcards = () => {
             }
 
             toast.success('Flashcards saved successfully!');
+            // Refresh the saved flashcards list
+            await fetchSavedFlashcards();
         } catch (error) {
             console.error('Error saving flashcards:', error);
             toast.error('Failed to save flashcards');
@@ -216,41 +218,39 @@ const Flashcards = () => {
 
             <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
                 <div className="flex gap-6">
-                    {/* Sidebar - Show if no flashcards loaded OR if we want to show saved list */}
-                    {flashcards.length === 0 && (
-                        <div className="w-1/3 space-y-6">
-                            {/* Transcript Selection */}
-                            <TranscriptSidebar
-                                videoId={videoId}
-                                userEmail={AuthService.getUser()?.email || 'anonymous'}
-                                onSelect={setSelectedTranscript}
-                                selectedTranscriptId={selectedTranscript?.id}
-                            />
+                    {/* Sidebar - Always show */}
+                    <div className="w-1/3 space-y-6">
+                        {/* Transcript Selection */}
+                        <TranscriptSidebar
+                            videoId={videoId}
+                            userEmail={AuthService.getUser()?.email || 'anonymous'}
+                            onSelect={setSelectedTranscript}
+                            selectedTranscriptId={selectedTranscript?.id}
+                        />
 
-                            {/* Saved Flashcards List */}
-                            {Array.isArray(savedFlashcards) && savedFlashcards.length > 0 && (
-                                <div className="bg-white shadow rounded-lg p-4">
-                                    <h3 className="text-lg font-medium text-gray-900 mb-4">Saved Flashcards</h3>
-                                    <div className="space-y-2">
-                                        {savedFlashcards.map((fc) => (
-                                            <button
-                                                key={fc.id}
-                                                onClick={() => loadSavedFlashcards(fc.id)}
-                                                className="w-full text-left p-3 rounded-md border border-gray-200 hover:bg-gray-50 transition-colors flex justify-between items-center"
-                                            >
-                                                <span className="font-medium text-gray-700">
-                                                    {getLanguageName(fc.language)}
-                                                </span>
-                                                <span className="text-xs text-gray-500">
-                                                    {new Date(fc.created_at).toLocaleDateString()}
-                                                </span>
-                                            </button>
-                                        ))}
-                                    </div>
+                        {/* Saved Flashcards List */}
+                        {Array.isArray(savedFlashcards) && savedFlashcards.length > 0 && (
+                            <div className="bg-white shadow rounded-lg p-4">
+                                <h3 className="text-lg font-medium text-gray-900 mb-4">Saved Flashcards</h3>
+                                <div className="space-y-2">
+                                    {savedFlashcards.map((fc) => (
+                                        <button
+                                            key={fc.id}
+                                            onClick={() => loadSavedFlashcards(fc.id)}
+                                            className="w-full text-left p-3 rounded-md border border-gray-200 hover:bg-gray-50 transition-colors flex justify-between items-center"
+                                        >
+                                            <span className="font-medium text-gray-700">
+                                                {getLanguageName(fc.language)}
+                                            </span>
+                                            <span className="text-xs text-gray-500">
+                                                {new Date(fc.created_at).toLocaleDateString()}
+                                            </span>
+                                        </button>
+                                    ))}
                                 </div>
-                            )}
-                        </div>
-                    )}
+                            </div>
+                        )}
+                    </div>
 
                     {/* Main Content */}
                     <div className="flex-1 px-4 py-6 sm:px-0">
@@ -259,29 +259,31 @@ const Flashcards = () => {
                             <p className="text-gray-600">Generate flashcards from the video transcript</p>
                         </div>
 
-                        {flashcards.length === 0 ? (
-                            <div className="bg-white shadow rounded-lg p-8 text-center">
-                                <div className="mb-6">
-                                    <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                    </svg>
-                                </div>
-                                <h3 className="text-lg font-medium text-gray-900 mb-2">No flashcards yet</h3>
-                                <p className="text-gray-600 mb-6">
-                                    {selectedTranscript
-                                        ? `Generate flashcards from the ${selectedTranscript.language} transcript`
-                                        : "Select a transcript or load a saved set"}
-                                </p>
-
-                                <button
-                                    onClick={handleGenerateFlashcards}
-                                    disabled={loading || !selectedTranscript}
-                                    className="bg-indigo-600 text-white px-6 py-3 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                                >
-                                    {loading ? 'Generating...' : '📚 Generate Flashcards'}
-                                </button>
+                        <div className="bg-white shadow rounded-lg p-8 text-center mb-6">
+                            <div className="mb-6">
+                                <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
                             </div>
-                        ) : (
+                            <h3 className="text-lg font-medium text-gray-900 mb-2">
+                                {flashcards.length > 0 ? 'Regenerate Flashcards' : 'No flashcards yet'}
+                            </h3>
+                            <p className="text-gray-600 mb-6">
+                                {selectedTranscript
+                                    ? `Generate flashcards from the ${selectedTranscript.language} transcript`
+                                    : "Select a transcript or load a saved set"}
+                            </p>
+
+                            <button
+                                onClick={handleGenerateFlashcards}
+                                disabled={loading || !selectedTranscript}
+                                className="bg-indigo-600 text-white px-6 py-3 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                            >
+                                {loading ? 'Generating...' : '📚 Generate Flashcards'}
+                            </button>
+                        </div>
+
+                        {flashcards.length > 0 && (
                             <div className="space-y-6">
                                 {/* Flashcard display area */}
                                 <div className="max-w-2xl mx-auto">
@@ -298,7 +300,7 @@ const Flashcards = () => {
                                                 onClick={() => setFlashcards([])}
                                                 className="text-gray-600 hover:text-gray-800"
                                             >
-                                                Generate New
+                                                Clear & Select New
                                             </button>
                                         </div>
                                     </div>
