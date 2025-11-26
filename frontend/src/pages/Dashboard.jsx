@@ -8,8 +8,6 @@ import { API_BASE_URL } from '../config/api';
 const Dashboard = () => {
     const [userEmail, setUserEmail] = useState('');
     const [loading, setLoading] = useState(true);
-    const [processing, setProcessing] = useState(false);
-    const [currentStage, setCurrentStage] = useState('Initializing...');
     const [videos, setVideos] = useState([]);
     const navigate = useNavigate();
 
@@ -19,51 +17,49 @@ const Dashboard = () => {
             const response = await fetch(`${API_BASE_URL}/videos?user_id=${userEmail}`);
             if (response.ok) {
                 const data = await response.json();
-                setVideos(data.videos);
+                // Sort by created_at desc
+                const sortedVideos = data.videos.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                setVideos(sortedVideos);
             }
         } catch (error) {
             console.error('Error fetching videos:', error);
         }
     };
 
+    // Polling logic: Poll if any video is in 'queued' or 'processing' state
+    useEffect(() => {
+        const hasPending = videos.some(v => v.status === 'queued' || v.status === 'processing');
+        let interval;
+        if (hasPending) {
+            interval = setInterval(fetchVideos, 3000);
+        }
+        return () => clearInterval(interval);
+    }, [videos, userEmail]);
+
     const handleUrlSubmit = async (url) => {
-        setProcessing(true);
+        try {
+            const response = await fetch(`${API_BASE_URL}/analyze`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    url: url,
+                    user_id: userEmail
+                })
+            });
 
-        // Create EventSource for Server-Sent Events
-        const eventSource = new EventSource(
-            `${API_BASE_URL}/analyze?${new URLSearchParams({ url, user_id: userEmail })}`,
-            { withCredentials: false }
-        );
-
-        // Handle incoming messages
-        eventSource.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-
-            if (data.stage === 1) {
-                setCurrentStage('Stage 1/3: Downloading video...');
-            } else if (data.stage === 2) {
-                setCurrentStage('Stage 2/3: Extracting audio...');
-            } else if (data.stage === 3) {
-                setCurrentStage('Stage 3/3: Generating transcript...');
-            } else if (data.stage === 'complete') {
-                toast.success('Video analyzed successfully! Transcript ready.');
-                fetchVideos();
-                eventSource.close();
-                setProcessing(false);
-            } else if (data.stage === 'error') {
-                toast.error(`Error: ${data.message}`);
-                eventSource.close();
-                setProcessing(false);
+            if (!response.ok) {
+                throw new Error('Failed to queue video');
             }
-        };
 
-        // Handle errors
-        eventSource.onerror = (error) => {
-            console.error('EventSource error:', error);
-            toast.error('Error analyzing video. Please try again.');
-            eventSource.close();
-            setProcessing(false);
-        };
+            toast.success('Video queued for processing');
+            fetchVideos(); // Update list immediately
+
+        } catch (error) {
+            console.error('Error submitting video:', error);
+            toast.error('Error submitting video');
+        }
     };
 
 
@@ -127,6 +123,21 @@ const Dashboard = () => {
         return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
     }
 
+    const getStatusBadge = (status) => {
+        switch (status) {
+            case 'completed':
+                return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Completed</span>;
+            case 'processing':
+                return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800 animate-pulse">Processing...</span>;
+            case 'queued':
+                return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">Queued</span>;
+            case 'failed':
+                return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Failed</span>;
+            default:
+                return null;
+        }
+    };
+
     return (
         <div className="min-h-screen bg-gray-100">
             <nav className="bg-white shadow-sm">
@@ -155,13 +166,6 @@ const Dashboard = () => {
                     <div className="flex flex-col items-center justify-center space-y-8">
                         <YouTubeInput onSubmit={handleUrlSubmit} />
 
-                        {processing && (
-                            <div className="flex flex-col items-center space-y-2">
-                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-                                <p className="text-gray-600">{currentStage}</p>
-                            </div>
-                        )}
-
                         {/* Video List */}
                         <div className="w-full max-w-4xl">
                             <h2 className="text-2xl font-bold text-gray-900 mb-4">Analyzed Videos</h2>
@@ -174,37 +178,44 @@ const Dashboard = () => {
                                             <li key={video.id}>
                                                 <div className="px-4 py-4 flex items-center justify-between sm:px-6">
                                                     <div className="flex-1 min-w-0">
-                                                        <h3 className="text-lg font-medium text-indigo-600 truncate" title={video.title}>
-                                                            {video.title}
-                                                        </h3>
+                                                        <div className="flex items-center space-x-2">
+                                                            <h3 className="text-lg font-medium text-indigo-600 truncate" title={video.title}>
+                                                                {video.title}
+                                                            </h3>
+                                                            {getStatusBadge(video.status)}
+                                                        </div>
                                                         <p className="mt-1 text-sm text-gray-500">
-                                                            Downloaded on {new Date(video.created_at).toLocaleDateString()}
+                                                            Added on {new Date(video.created_at).toLocaleDateString()}
                                                         </p>
                                                     </div>
                                                     <div className="ml-4 flex-shrink-0 flex items-center space-x-2">
-                                                        <button
-                                                            onClick={() => navigate(`/flashcards/${video.id}`)}
-                                                            className="text-sm font-medium text-indigo-600 hover:text-indigo-800 px-3 py-1 rounded border border-indigo-600 hover:bg-indigo-50"
-                                                            title="Generate Flashcards"
-                                                        >
-                                                            📚 Flashcards
-                                                        </button>
+                                                        {video.status === 'completed' && (
+                                                            <>
+                                                                <button
+                                                                    onClick={() => navigate(`/flashcards/${video.id}`)}
+                                                                    className="text-sm font-medium text-indigo-600 hover:text-indigo-800 px-3 py-1 rounded border border-indigo-600 hover:bg-indigo-50"
+                                                                    title="Generate Flashcards"
+                                                                >
+                                                                    📚 Flashcards
+                                                                </button>
 
-                                                        <button
-                                                            onClick={() => navigate(`/quiz/${video.id}`)}
-                                                            className="text-sm font-medium text-purple-600 hover:text-purple-800 px-3 py-1 rounded border border-purple-600 hover:bg-purple-50"
-                                                            title="Generate Quiz"
-                                                        >
-                                                            ✏️ Quiz
-                                                        </button>
+                                                                <button
+                                                                    onClick={() => navigate(`/quiz/${video.id}`)}
+                                                                    className="text-sm font-medium text-purple-600 hover:text-purple-800 px-3 py-1 rounded border border-purple-600 hover:bg-purple-50"
+                                                                    title="Generate Quiz"
+                                                                >
+                                                                    ✏️ Quiz
+                                                                </button>
 
-                                                        <button
-                                                            onClick={() => navigate(`/transcripts/${video.id}`)}
-                                                            className="text-sm font-medium text-green-600 hover:text-green-800 px-3 py-1 rounded border border-green-600 hover:bg-green-50"
-                                                            title="Manage Transcripts"
-                                                        >
-                                                            🌍 Transcripts
-                                                        </button>
+                                                                <button
+                                                                    onClick={() => navigate(`/transcripts/${video.id}`)}
+                                                                    className="text-sm font-medium text-green-600 hover:text-green-800 px-3 py-1 rounded border border-green-600 hover:bg-green-50"
+                                                                    title="Manage Transcripts"
+                                                                >
+                                                                    🌍 Transcripts
+                                                                </button>
+                                                            </>
+                                                        )}
 
                                                         <button
                                                             onClick={() => handleDelete(video.id)}

@@ -9,6 +9,8 @@ import datetime
 import asyncio
 from typing import List, Optional
 from sqlalchemy.orm import Session
+import boto3
+from botocore.exceptions import ClientError
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -27,6 +29,43 @@ app = FastAPI()
 
 # Initialize database
 init_db()
+
+# AWS Clients
+try:
+    AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
+    S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME')
+    
+    # Initialize S3 client if credentials are provided or available in environment
+    if os.getenv('AWS_ACCESS_KEY_ID') and os.getenv('AWS_SECRET_ACCESS_KEY'):
+        s3 = boto3.client(
+            's3',
+            region_name=AWS_REGION,
+            aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+            aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+            aws_session_token=os.getenv('AWS_SESSION_TOKEN')
+        )
+        sqs = boto3.client(
+            'sqs',
+            region_name=AWS_REGION,
+            aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+            aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+            aws_session_token=os.getenv('AWS_SESSION_TOKEN')
+        )
+    else:
+        # Fallback to default credential provider chain
+        s3 = boto3.client('s3', region_name=AWS_REGION)
+        sqs = boto3.client('sqs', region_name=AWS_REGION)
+        
+    USE_S3 = bool(S3_BUCKET_NAME)
+    SQS_QUEUE_URL = os.getenv('SQS_TRANSCRIPTION_QUEUE_URL')
+    print(f"AWS Integration: S3={USE_S3} (Bucket: {S3_BUCKET_NAME}), SQS={bool(SQS_QUEUE_URL)}")
+except Exception as e:
+    print(f"Warning: AWS clients not initialized - {e}")
+    USE_S3 = False
+    s3 = None
+    sqs = None
+    S3_BUCKET_NAME = None
+    SQS_QUEUE_URL = None
 
 # Configure CORS
 app.add_middleware(
@@ -71,6 +110,12 @@ class SaveQuizRequest(BaseModel):
 class UserLoginRequest(BaseModel):
     email: str
 
+# ====================
+# Helper Functions
+# ====================
+
+from src.utils import upload_to_s3, delete_from_s3, read_file_content, send_to_sqs, USE_S3, S3_BUCKET_NAME, SQS_QUEUE_URL
+
 @app.post("/flashcards/save")
 async def save_flashcards(request: SaveFlashcardsRequest, db: Session = Depends(get_db)):
     try:
@@ -87,6 +132,16 @@ async def save_flashcards(request: SaveFlashcardsRequest, db: Session = Depends(
         # Save to JSON file
         with open(file_path, "w", encoding='utf-8') as f:
             json.dump(request.flashcards, f, indent=4, ensure_ascii=False)
+
+        # Upload to S3 if enabled
+        if USE_S3:
+            s3_key = f"flashcards/{request.user_id}/{request.video_id}/{filename}"
+            stored_path = upload_to_s3(file_path, s3_key)
+            # Optional: Delete local file after upload
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        else:
+            stored_path = file_path
 
         # 2. Save to Database
         # Find user
@@ -110,7 +165,7 @@ async def save_flashcards(request: SaveFlashcardsRequest, db: Session = Depends(
 
         if existing_flashcard:
             # Update existing
-            existing_flashcard.file_path = file_path
+            existing_flashcard.file_path = stored_path
             existing_flashcard.created_at = datetime.datetime.utcnow() # Update timestamp
             db.commit()
             db.refresh(existing_flashcard)
@@ -121,14 +176,14 @@ async def save_flashcards(request: SaveFlashcardsRequest, db: Session = Depends(
                 video_id=video.id,
                 user_id=user.id,
                 language=request.language,
-                file_path=file_path
+                file_path=stored_path
             )
             db.add(new_flashcard)
             db.commit()
             db.refresh(new_flashcard)
             print(f"Created new flashcards for video {video.id} lang {request.language}")
 
-        return {"message": "Flashcards saved successfully", "path": file_path}
+        return {"message": "Flashcards saved successfully", "path": stored_path}
 
     except HTTPException as he:
         raise he
@@ -156,111 +211,50 @@ async def user_login(request: UserLoginRequest, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-async def analyze_video_stream(url: str, user_id: str):
-    """Generator function that yields SSE events for each stage"""
+@app.post("/analyze")
+async def queue_video_analysis(request: VideoRequest, db: Session = Depends(get_db)):
+    """
+    Queue video for analysis.
+    Creates a DB record with status 'queued' and sends message to SQS.
+    """
     try:
-        downloader = VideoDownloader(user_id=user_id)
-        
-        # Stage 1: Download video
-        yield f"data: {json.dumps({'stage': 1, 'message': 'Downloading video...'})}\n\n"
-        await asyncio.sleep(0.1)  # Allow event to be sent
-        
-        result = downloader.download_video(url)
-        video_path = result['filename']
-        video_title = result['title']
-        
-        # Stage 2: Extract audio
-        yield f"data: {json.dumps({'stage': 2, 'message': 'Extracting audio...'})}\n\n"
-        await asyncio.sleep(0.1)
-        
-        audio_path = downloader.extract_audio(video_path)
-        
-        # Stage 3: Generate transcript
-        yield f"data: {json.dumps({'stage': 3, 'message': 'Generating transcript...'})}\n\n"
-        await asyncio.sleep(0.1)
-        
-        transcript_path = downloader.generate_transcript(audio_path, video_title)
-        
-        # Cleanup: Delete video and audio files to save storage (keep only transcript)
-        print(f"Cleaning up: Deleting video and audio files...")
-        if os.path.exists(video_path):
-            os.remove(video_path)
-            print(f"Deleted video: {video_path}")
-        if os.path.exists(audio_path):
-            os.remove(audio_path)
-            print(f"Deleted audio: {audio_path}")
-        
-        # Save to database
-        from database import SessionLocal
-        db = SessionLocal()
-        try:
-            # Find or create user
-            user = db.query(User).filter(User.email == user_id).first()
-            if not user:
-                user = User(email=user_id)
-                db.add(user)
-                db.commit()
-                db.refresh(user)
-            
-            # Create video record
-            db_video = Video(
-                user_id=user.id,
-                title=video_title,
-                url=url
-            )
-            db.add(db_video)
+        # Find or create user
+        user = db.query(User).filter(User.email == request.user_id).first()
+        if not user:
+            user = User(email=request.user_id)
+            db.add(user)
             db.commit()
-            db.refresh(db_video)
-            
-            
-            # Detect language of the original transcript
-            detected_language = 'en'  # Default to English
-            try:
-                from langdetect import detect
-                # Read a sample of the transcript for language detection
-                with open(transcript_path, 'r', encoding='utf-8') as f:
-                    # Read first 1000 characters for detection
-                    sample_text = f.read(1000)
-                    # Remove timestamps if present
-                    lines = [line.split(']')[-1].strip() if ']' in line else line.strip() 
-                            for line in sample_text.split('\n') if line.strip()]
-                    text_for_detection = ' '.join(lines[:10])  # Use first 10 lines
-                    if text_for_detection:
-                        detected_language = detect(text_for_detection)
-                        print(f"Detected language: {detected_language}")
-            except Exception as e:
-                print(f"Language detection failed: {e}, defaulting to 'en'")
-            
-            # Create transcript record for the original language
-            db_transcript = Transcript(
-                video_id=db_video.id,
-                user_id=user.id,
-                language=detected_language,  # Use detected language
-                file_path=transcript_path
-            )
-            db.add(db_transcript)
-            db.commit()
-            
-            # Send completion event
-            yield f"data: {json.dumps({'stage': 'complete', 'message': 'Video analyzed successfully!', 'video': {'id': db_video.id, 'title': db_video.title}})}\n\n"
-        finally:
-            db.close()
+            db.refresh(user)
+        
+        # Create video record with 'queued' status
+        # We don't have the title yet, so use URL or placeholder
+        db_video = Video(
+            user_id=user.id,
+            title=f"Processing: {request.url}", # Placeholder, worker will update
+            url=request.url,
+            status='queued'
+        )
+        db.add(db_video)
+        db.commit()
+        db.refresh(db_video)
+        
+        # Send to SQS
+        message = {
+            "video_id": db_video.id,
+            "url": request.url,
+            "user_id": request.user_id
+        }
+        send_to_sqs(message)
+        
+        return {
+            "message": "Video queued for analysis",
+            "video_id": db_video.id,
+            "status": "queued"
+        }
             
     except Exception as e:
-        print(f"Error during analysis: {e}")
-        yield f"data: {json.dumps({'stage': 'error', 'message': str(e)})}\n\n"
-
-@app.get("/analyze")
-async def analyze_video(url: str, user_id: str = "anonymous"):
-    return StreamingResponse(
-        analyze_video_stream(url, user_id),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        }
-    )
+        print(f"Error queuing video: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/videos")
@@ -278,6 +272,7 @@ async def list_videos(user_id: str = "anonymous", db: Session = Depends(get_db))
                     "id": v.id,
                     "title": v.title,
                     "url": v.url,
+                    "status": v.status,
                     "created_at": v.created_at
                 }
                 for v in videos
@@ -373,28 +368,37 @@ async def delete_video(video_id: int, user_id: str = "anonymous", db: Session = 
         # but explicit deletion using stored paths is safer.
         
         for flashcard in video.flashcards:
-            if flashcard.file_path and os.path.exists(flashcard.file_path):
-                try:
-                    os.remove(flashcard.file_path)
-                    print(f"Deleted flashcard file: {flashcard.file_path}")
-                except Exception as e:
-                    print(f"Error deleting flashcard file {flashcard.file_path}: {e}")
+            if flashcard.file_path:
+                if flashcard.file_path.startswith("s3://"):
+                    delete_from_s3(flashcard.file_path)
+                elif os.path.exists(flashcard.file_path):
+                    try:
+                        os.remove(flashcard.file_path)
+                        print(f"Deleted flashcard file: {flashcard.file_path}")
+                    except Exception as e:
+                        print(f"Error deleting flashcard file {flashcard.file_path}: {e}")
 
         for quiz in video.quizzes:
-            if quiz.file_path and os.path.exists(quiz.file_path):
-                try:
-                    os.remove(quiz.file_path)
-                    print(f"Deleted quiz file: {quiz.file_path}")
-                except Exception as e:
-                    print(f"Error deleting quiz file {quiz.file_path}: {e}")
+            if quiz.file_path:
+                if quiz.file_path.startswith("s3://"):
+                    delete_from_s3(quiz.file_path)
+                elif os.path.exists(quiz.file_path):
+                    try:
+                        os.remove(quiz.file_path)
+                        print(f"Deleted quiz file: {quiz.file_path}")
+                    except Exception as e:
+                        print(f"Error deleting quiz file {quiz.file_path}: {e}")
 
         for transcript in video.transcripts:
-            if transcript.file_path and os.path.exists(transcript.file_path):
-                try:
-                    os.remove(transcript.file_path)
-                    print(f"Deleted transcript file: {transcript.file_path}")
-                except Exception as e:
-                    print(f"Error deleting transcript file {transcript.file_path}: {e}")
+            if transcript.file_path:
+                if transcript.file_path.startswith("s3://"):
+                    delete_from_s3(transcript.file_path)
+                elif os.path.exists(transcript.file_path):
+                    try:
+                        os.remove(transcript.file_path)
+                        print(f"Deleted transcript file: {transcript.file_path}")
+                    except Exception as e:
+                        print(f"Error deleting transcript file {transcript.file_path}: {e}")
 
         # Delete from database
         db.delete(video)
@@ -428,12 +432,61 @@ async def translate_video(request: TranslateRequest, db: Session = Depends(get_d
             raise HTTPException(status_code=404, detail="Original transcript not found in database")
         
         transcript_path = original_transcript.file_path
-        if not os.path.exists(transcript_path):
-            raise HTTPException(status_code=404, detail=f"Transcript file not found at {transcript_path}")
-            
         # Perform translation
-        translator = Translator()
-        translated_path = translator.translate_transcript(transcript_path, request.target_language)
+        # Handle S3 paths
+        if transcript_path.startswith("s3://"):
+            # Create a temporary local file
+            content = read_file_content(transcript_path)
+            
+            # Create temp directory
+            temp_dir = "downloads/temp"
+            os.makedirs(temp_dir, exist_ok=True)
+            
+            filename = os.path.basename(transcript_path)
+            temp_input_path = os.path.join(temp_dir, filename)
+            
+            with open(temp_input_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+                
+            # Translate using local temp file
+            translator = Translator()
+            # This returns a local path in the same directory as input
+            temp_output_path = translator.translate_transcript(temp_input_path, request.target_language)
+            
+            # Upload result to S3
+            if USE_S3:
+                output_filename = os.path.basename(temp_output_path)
+                s3_key = f"transcripts/{user.email}/{output_filename}"
+                translated_path = upload_to_s3(temp_output_path, s3_key)
+                
+                # Cleanup temp files
+                if os.path.exists(temp_input_path):
+                    os.remove(temp_input_path)
+                if os.path.exists(temp_output_path):
+                    os.remove(temp_output_path)
+            else:
+                # Should not happen if input was S3, but just in case
+                translated_path = temp_output_path
+                
+        else:
+            # Local file path
+            if not os.path.exists(transcript_path):
+                raise HTTPException(status_code=404, detail=f"Transcript file not found at {transcript_path}")
+                
+            translator = Translator()
+            translated_path = translator.translate_transcript(transcript_path, request.target_language)
+            
+            # If S3 is enabled but input was local (legacy?), upload result
+            if USE_S3:
+                output_filename = os.path.basename(translated_path)
+                s3_key = f"transcripts/{user.email}/{output_filename}"
+                s3_path = upload_to_s3(translated_path, s3_key)
+                
+                # Cleanup local file
+                if os.path.exists(translated_path):
+                    os.remove(translated_path)
+                
+                translated_path = s3_path
         
         # Save translated transcript to database
         # Check if translation already exists
@@ -451,6 +504,10 @@ async def translate_video(request: TranslateRequest, db: Session = Depends(get_d
             )
             db.add(db_transcript)
             db.commit()
+        else:
+            # Update existing path
+            existing_transcript.file_path = translated_path
+            db.commit()
         
         return {
             "message": "Translation successful",
@@ -461,6 +518,8 @@ async def translate_video(request: TranslateRequest, db: Session = Depends(get_d
         
     except Exception as e:
         print(f"Translation error: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/flashcards/generate")
@@ -495,11 +554,12 @@ async def generate_flashcards(request: GenerateFlashcardsRequest, db: Session = 
              raise HTTPException(status_code=404, detail="No transcript found for this video")
 
         transcript_path = transcript.file_path
-        if not os.path.exists(transcript_path):
-             raise HTTPException(status_code=404, detail=f"Transcript file not found at {transcript_path}")
-
-        with open(transcript_path, 'r', encoding='utf-8') as f:
-            transcript_text = f.read()
+        
+        # Read content using helper that handles S3 or local
+        try:
+            transcript_text = read_file_content(transcript_path)
+        except Exception as e:
+            raise HTTPException(status_code=404, detail=f"Could not read transcript file: {e}")
 
         # Generate flashcards
         generator = FlashcardGenerator()
@@ -530,11 +590,7 @@ async def get_flashcard_content(flashcard_id: int, user_id: str = "anonymous", d
             raise HTTPException(status_code=404, detail="Flashcard set not found")
 
         # Read file content
-        if not os.path.exists(flashcard.file_path):
-             raise HTTPException(status_code=404, detail="Flashcard file not found on server")
-
-        with open(flashcard.file_path, "r", encoding='utf-8') as f:
-            content = json.load(f)
+        content = json.loads(read_file_content(flashcard.file_path))
 
         return {"flashcards": content}
 
@@ -569,11 +625,10 @@ async def generate_quiz(request: GenerateQuizRequest, db: Session = Depends(get_
             raise HTTPException(status_code=404, detail=f"No transcript found for language: {request.language}")
 
         # Read transcript content
-        if not os.path.exists(transcript.file_path):
-            raise HTTPException(status_code=404, detail="Transcript file not found on server")
-
-        with open(transcript.file_path, "r", encoding='utf-8') as f:
-            transcript_text = f.read()
+        try:
+            transcript_text = read_file_content(transcript.file_path)
+        except Exception as e:
+            raise HTTPException(status_code=404, detail=f"Could not read transcript file: {e}")
 
         # Generate quiz using QuizGenerator
         generator = QuizGenerator()
@@ -612,6 +667,16 @@ async def save_quiz(request: SaveQuizRequest, db: Session = Depends(get_db)):
         with open(file_path, "w", encoding='utf-8') as f:
             json.dump(request.quiz, f, ensure_ascii=False, indent=2)
 
+        # Upload to S3 if enabled
+        if USE_S3:
+            s3_key = f"quizzes/{request.user_id}/{request.video_id}/{filename}"
+            stored_path = upload_to_s3(file_path, s3_key)
+            # Optional: Delete local file after upload
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        else:
+            stored_path = file_path
+
         # 2. Save to Database
         # Find user
         user = db.query(User).filter(User.email == request.user_id).first()
@@ -631,7 +696,7 @@ async def save_quiz(request: SaveQuizRequest, db: Session = Depends(get_db)):
 
         if existing_quiz:
             # Update existing
-            existing_quiz.file_path = file_path
+            existing_quiz.file_path = stored_path
             existing_quiz.created_at = datetime.datetime.utcnow()
             db.commit()
             db.refresh(existing_quiz)
@@ -642,14 +707,14 @@ async def save_quiz(request: SaveQuizRequest, db: Session = Depends(get_db)):
                 video_id=video.id,
                 user_id=user.id,
                 language=request.language,
-                file_path=file_path
+                file_path=stored_path
             )
             db.add(new_quiz)
             db.commit()
             db.refresh(new_quiz)
             print(f"Created new quiz for video {video.id}")
 
-        return {"message": "Quiz saved successfully", "file_path": file_path}
+        return {"message": "Quiz saved successfully", "file_path": stored_path}
 
     except HTTPException as he:
         raise he
@@ -704,11 +769,7 @@ async def get_quiz_content(quiz_id: int, user_id: str = "anonymous", db: Session
             raise HTTPException(status_code=404, detail="Quiz not found")
 
         # Read file content
-        if not os.path.exists(quiz.file_path):
-             raise HTTPException(status_code=404, detail="Quiz file not found on server")
-
-        with open(quiz.file_path, "r", encoding='utf-8') as f:
-            content = json.load(f)
+        content = json.loads(read_file_content(quiz.file_path))
 
         return {"quiz": content}
 
@@ -734,9 +795,12 @@ async def delete_flashcard(flashcard_id: int, user_id: str = "anonymous", db: Se
             raise HTTPException(status_code=404, detail="Flashcard set not found")
 
         # Delete file if exists
-        if os.path.exists(flashcard.file_path):
-            os.remove(flashcard.file_path)
-            print(f"Deleted flashcard file: {flashcard.file_path}")
+        if flashcard.file_path:
+            if flashcard.file_path.startswith("s3://"):
+                delete_from_s3(flashcard.file_path)
+            elif os.path.exists(flashcard.file_path):
+                os.remove(flashcard.file_path)
+                print(f"Deleted flashcard file: {flashcard.file_path}")
 
         # Delete from database
         db.delete(flashcard)
@@ -766,9 +830,12 @@ async def delete_quiz(quiz_id: int, user_id: str = "anonymous", db: Session = De
             raise HTTPException(status_code=404, detail="Quiz not found")
 
         # Delete file if exists
-        if os.path.exists(quiz.file_path):
-            os.remove(quiz.file_path)
-            print(f"Deleted quiz file: {quiz.file_path}")
+        if quiz.file_path:
+            if quiz.file_path.startswith("s3://"):
+                delete_from_s3(quiz.file_path)
+            elif os.path.exists(quiz.file_path):
+                os.remove(quiz.file_path)
+                print(f"Deleted quiz file: {quiz.file_path}")
 
         # Delete from database
         db.delete(quiz)

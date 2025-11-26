@@ -5,7 +5,18 @@ import datetime
 import os
 
 # Database URL
-DATABASE_URL = os.getenv("DATABASE_URL", "mysql+pymysql://root:@localhost/yt_analyzer")
+DB_USER = os.getenv("DB_USER", "root")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "")
+DB_HOST = os.getenv("DB_HOST", "localhost")
+DB_PORT = os.getenv("DB_PORT", "3306")
+DB_NAME = os.getenv("DB_NAME", "yt_analyzer")
+
+# Handle special characters in password
+from urllib.parse import quote_plus
+if DB_PASSWORD:
+    DB_PASSWORD = quote_plus(DB_PASSWORD)
+
+DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -101,7 +112,7 @@ def init_db():
     # Connect to server to create DB
     temp_engine = create_engine(server_url)
     with temp_engine.connect() as conn:
-        conn.execute(text(f"CREATE DATABASE IF NOT EXISTS {db_name}"))
+        conn.execute(text(f"CREATE DATABASE IF NOT EXISTS `{db_name}`"))
     
     # Create all tables
     Base.metadata.create_all(bind=engine)
