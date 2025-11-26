@@ -91,7 +91,7 @@ class VideoDownloader:
 
             # Load Whisper model (tiny)
             print("Loading Whisper model...")
-            model = whisper.load_model("turbo")
+            model = whisper.load_model("tiny")
             
             # Transcribe audio
             print(f"Transcribing audio: {audio_path}")

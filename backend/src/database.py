@@ -5,7 +5,6 @@ import datetime
 import os
 
 # Database URL
-# Assuming default root user with no password for local development as per plan
 DATABASE_URL = os.getenv("DATABASE_URL", "mysql+pymysql://root:@localhost/yt_analyzer")
 
 engine = create_engine(DATABASE_URL)
@@ -15,73 +14,74 @@ Base = declarative_base()
 
 class User(Base):
     __tablename__ = "users"
-
+    
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String(255), unique=True, index=True, nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
-
+    
     # Relationships
-    videos = relationship("Video", back_populates="user")
-    transcripts = relationship("Transcript", back_populates="user")
-    flashcards = relationship("Flashcard", back_populates="user")
-    quizzes = relationship("Quiz", back_populates="user")
+    videos = relationship("Video", back_populates="user", cascade="all, delete-orphan")
+    transcripts = relationship("Transcript", back_populates="user", cascade="all, delete-orphan")
+    flashcards = relationship("Flashcard", back_populates="user", cascade="all, delete-orphan")
+    quizzes = relationship("Quiz", back_populates="user", cascade="all, delete-orphan")
 
 class Video(Base):
     __tablename__ = "videos"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
-    title = Column(String(255))
-    url = Column(String(255))
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    title = Column(String(255), nullable=False)
+    url = Column(String(500), nullable=False)
+    status = Column(String(20), default='processing')  # 'processing', 'completed', 'failed'
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
-
+    
     # Relationships
     user = relationship("User", back_populates="videos")
     transcripts = relationship("Transcript", back_populates="video", cascade="all, delete-orphan")
-    flashcards = relationship("Flashcard", back_populates="video")
-    quizzes = relationship("Quiz", back_populates="video")
+    flashcards = relationship("Flashcard", back_populates="video", cascade="all, delete-orphan")
+    quizzes = relationship("Quiz", back_populates="video", cascade="all, delete-orphan")
 
 class Transcript(Base):
     __tablename__ = "transcripts"
-
+    
     id = Column(Integer, primary_key=True, index=True)
-    video_id = Column(Integer, ForeignKey("videos.id"), index=True, nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
-    language = Column(String(10), nullable=False)  # Language code like 'en', 'es', etc.
-    file_path = Column(String(500), nullable=False)
+    video_id = Column(Integer, ForeignKey("videos.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    language = Column(String(10), default='en')  # ISO language code
+    file_path = Column(String(500), nullable=False)  # S3 path or local path
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
-
+    
     # Relationships
-    video = relationship("Video", back_populates="transcripts")
     user = relationship("User", back_populates="transcripts")
+    video = relationship("Video", back_populates="transcripts")
 
 class Flashcard(Base):
     __tablename__ = "flashcards"
-
+    
     id = Column(Integer, primary_key=True, index=True)
-    video_id = Column(Integer, ForeignKey("videos.id"), index=True, nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
-    language = Column(String(10), nullable=False)
-    file_path = Column(String(500), nullable=False)  # Path to JSON file
+    video_id = Column(Integer, ForeignKey("videos.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    language = Column(String(10), default='en')
+    file_path = Column(String(500), nullable=False)  # S3 path or local path
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
-
+    
     # Relationships
-    video = relationship("Video", back_populates="flashcards")
     user = relationship("User", back_populates="flashcards")
+    video = relationship("Video", back_populates="flashcards")
 
 class Quiz(Base):
     __tablename__ = "quizzes"
-
+    
     id = Column(Integer, primary_key=True, index=True)
-    video_id = Column(Integer, ForeignKey("videos.id"), index=True, nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
-    language = Column(String(10), nullable=False)
-    file_path = Column(String(500), nullable=False)  # Path to JSON file
+    video_id = Column(Integer, ForeignKey("videos.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    language = Column(String(10), default='en')
+    file_path = Column(String(500), nullable=False)  # S3 path or local path
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
-
+    
     # Relationships
-    video = relationship("Video", back_populates="quizzes")
     user = relationship("User", back_populates="quizzes")
+    video = relationship("Video", back_populates="quizzes")
 
 def get_db():
     db = SessionLocal()
@@ -91,18 +91,17 @@ def get_db():
         db.close()
 
 def init_db():
-    # Create database if it doesn't exist
-    # This requires connecting to the server without selecting a DB first
+    """Initialize database - create database and tables if they don't exist"""
     import sqlalchemy
     from sqlalchemy import text
     
     server_url = DATABASE_URL.rsplit('/', 1)[0]
-    db_name = DATABASE_URL.rsplit('/', 1)[1]
+    db_name = DATABASE_URL.rsplit('/', 1)[1].split('?')[0]  # Handle query params
     
     # Connect to server to create DB
     temp_engine = create_engine(server_url)
     with temp_engine.connect() as conn:
         conn.execute(text(f"CREATE DATABASE IF NOT EXISTS {db_name}"))
     
-    # Create tables
+    # Create all tables
     Base.metadata.create_all(bind=engine)

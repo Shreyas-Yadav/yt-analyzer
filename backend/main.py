@@ -368,6 +368,34 @@ async def delete_video(video_id: int, user_id: str = "anonymous", db: Session = 
         downloader = VideoDownloader(user_id=user_id)
         downloader.delete_video(None, video.title)  # Pass None for file_path since we don't store it
         
+        # Delete associated files (flashcards, quizzes, transcripts)
+        # Note: downloader.delete_video might try to delete transcripts based on title, 
+        # but explicit deletion using stored paths is safer.
+        
+        for flashcard in video.flashcards:
+            if flashcard.file_path and os.path.exists(flashcard.file_path):
+                try:
+                    os.remove(flashcard.file_path)
+                    print(f"Deleted flashcard file: {flashcard.file_path}")
+                except Exception as e:
+                    print(f"Error deleting flashcard file {flashcard.file_path}: {e}")
+
+        for quiz in video.quizzes:
+            if quiz.file_path and os.path.exists(quiz.file_path):
+                try:
+                    os.remove(quiz.file_path)
+                    print(f"Deleted quiz file: {quiz.file_path}")
+                except Exception as e:
+                    print(f"Error deleting quiz file {quiz.file_path}: {e}")
+
+        for transcript in video.transcripts:
+            if transcript.file_path and os.path.exists(transcript.file_path):
+                try:
+                    os.remove(transcript.file_path)
+                    print(f"Deleted transcript file: {transcript.file_path}")
+                except Exception as e:
+                    print(f"Error deleting transcript file {transcript.file_path}: {e}")
+
         # Delete from database
         db.delete(video)
         db.commit()
