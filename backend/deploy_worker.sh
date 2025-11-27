@@ -14,7 +14,13 @@ sudo apt-get install -y ffmpeg git
 if ! command -v uv &> /dev/null; then
     echo "📦 Installing uv..."
     curl -LsSf https://astral.sh/uv/install.sh | sh
-    source $HOME/.cargo/env
+    
+    # Source the correct env file
+    if [ -f "$HOME/.local/bin/env" ]; then
+        source "$HOME/.local/bin/env"
+    elif [ -f "$HOME/.cargo/env" ]; then
+        source "$HOME/.cargo/env"
+    fi
 else
     echo "✅ uv is already installed"
 fi
