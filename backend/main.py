@@ -13,8 +13,8 @@ import boto3
 from botocore.exceptions import ClientError
 from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Load environment variables via config module (supports .env and AWS SSM)
+import src.config
 
 # Add the src directory to the python path
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))

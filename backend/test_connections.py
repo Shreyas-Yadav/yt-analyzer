@@ -1,11 +1,11 @@
 import os
 import sys
 import boto3
+import pymysql
 from sqlalchemy import create_engine, text
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
+from urllib.parse import quote_plus
+# Load environment variables via config module (supports .env and AWS SSM)
+import src.config
 
 def test_db_connection():
     print("Testing Database Connection...")
@@ -15,6 +15,12 @@ def test_db_connection():
     db_host = os.getenv("DB_HOST")
     db_port = os.getenv("DB_PORT", "3306")
     db_name = os.getenv("DB_NAME")
+
+    # Debug: Print loaded config (masked)
+    print(f"DEBUG: DB_USER={db_user if db_user else 'NOT_SET'}")
+    print(f"DEBUG: DB_HOST={db_host if db_host else 'NOT_SET'}")
+    print(f"DEBUG: DB_PORT={db_port}")
+    print(f"DEBUG: DB_NAME={db_name if db_name else 'NOT_SET'}")
     
     if not all([db_user, db_host, db_name]):
         print("❌ Missing DB environment variables (DB_USER, DB_HOST, DB_NAME)")
@@ -109,9 +115,19 @@ if __name__ == "__main__":
     s3_ok = test_s3_connection()
     sqs_ok = test_sqs_connection()
     
-    if db_ok and s3_ok and sqs_ok:
+    print("\nTesting Anthropic API Key...")
+    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+    anthropic_ok = False
+    if anthropic_key:
+        print(f"✅ ANTHROPIC_API_KEY is set (Length: {len(anthropic_key)})")
+        anthropic_ok = True
+    else:
+        print("❌ ANTHROPIC_API_KEY is NOT set")
+
+    if db_ok and s3_ok and sqs_ok and anthropic_ok:
         print("\n✅ All connections look good!")
         sys.exit(0)
     else:
         print("\n❌ Some connections failed. Please check your .env file and AWS settings.")
         sys.exit(1)
+

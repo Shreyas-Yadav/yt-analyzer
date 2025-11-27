@@ -3,10 +3,8 @@ import json
 import time
 import boto3
 import traceback
-from dotenv import load_dotenv
-
-# Load environment variables FIRST
-load_dotenv()
+# Load environment variables via config module (supports .env and AWS SSM)
+import src.config
 
 from src.downloader.video_downloader import VideoDownloader
 from src.database import SessionLocal, Video, Transcript, User, init_db
