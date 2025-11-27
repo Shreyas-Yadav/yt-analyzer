@@ -37,6 +37,14 @@ class VideoDownloader:
             'cookies': os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'cookies.txt'),
         }
 
+        cookies_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'cookies.txt')
+        print(f"DEBUG: Looking for cookies at: {cookies_path}")
+        if os.path.exists(cookies_path):
+            print("DEBUG: Cookies file found!")
+            ydl_opts['cookies'] = cookies_path
+        else:
+            print("DEBUG: Cookies file NOT found!")
+
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True)
