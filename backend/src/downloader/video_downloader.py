@@ -34,6 +34,7 @@ class VideoDownloader:
             'quiet': True,
             'no_warnings': True,
             'noplaylist': True,
+            'cookies': os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'cookies.txt'),
         }
 
         try:
