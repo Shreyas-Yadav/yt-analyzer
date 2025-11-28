@@ -28,7 +28,7 @@ def load_config():
         REQUIRED_PARAMS = [
             "DB_HOST", "DB_USER", "DB_PASSWORD", "DB_NAME", "DB_PORT",
             "S3_BUCKET_NAME", "SQS_TRANSCRIPTION_QUEUE_URL",
-            "ANTHROPIC_API_KEY"
+            "ANTHROPIC_API_KEY", "PROXY_URL"
         ]
         
         # print(f"Attempting to fetch individual parameters from SSM (Region: {aws_region})...")

@@ -34,17 +34,15 @@ class VideoDownloader:
             'quiet': True,
             'no_warnings': True,
             'noplaylist': True,
-            'cookies': os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'cookies.txt'),
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         }
 
-        cookies_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'cookies.txt')
-        print(f"DEBUG: Looking for cookies at: {cookies_path}")
-        if os.path.exists(cookies_path):
-            print("DEBUG: Cookies file found!")
-            ydl_opts['cookies'] = cookies_path
+        # Use Proxy if configured (e.g., http://100.x.y.z:8888)
+        proxy_url = os.environ.get('PROXY_URL')
+        if proxy_url:
+            print(f"DEBUG: Using Proxy: {proxy_url}")
+            ydl_opts['proxy'] = proxy_url
         else:
-            print("DEBUG: Cookies file NOT found!")
+            print("DEBUG: No PROXY_URL found, connecting directly.")
 
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
