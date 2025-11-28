@@ -25,7 +25,9 @@ from generator.flashcard_generator import FlashcardGenerator
 from generator.quiz_generator import QuizGenerator
 from database import init_db, get_db, Video, User, Transcript, Flashcard, Quiz
 
-app = FastAPI()
+# Initialize FastAPI with optional root_path (useful for Lambda behind API Gateway with custom paths)
+root_path = os.getenv("ROOT_PATH", "")
+app = FastAPI(root_path=root_path)
 
 # Initialize database
 init_db()
@@ -68,13 +70,31 @@ except Exception as e:
     SQS_QUEUE_URL = None
 
 # Configure CORS
+cors_origins_str = os.getenv("CORS_ORIGINS", "http://localhost:5173")
+origins = [origin.strip() for origin in cors_origins_str.split(",")]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # Allow frontend origin
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/")
+def health_check():
+    return {"status": "ok", "service": "yt-analyzer-backend"}
+
+# Lambda Handler
+# Lambda Handler
+from mangum import Mangum
+mangum_handler = Mangum(app)
+
+def handler(event, context):
+    print("DEBUG: Incoming Event")
+    print(json.dumps(event))
+    print(f"DEBUG: ROOT_PATH env var: {os.getenv('ROOT_PATH')}")
+    return mangum_handler(event, context)
 
 class VideoRequest(BaseModel):
     url: str
@@ -121,7 +141,9 @@ async def save_flashcards(request: SaveFlashcardsRequest, db: Session = Depends(
     try:
         # 1. Save to File System
         # Create directory structure: downloads/flashcards/{user_id}/{video_id}
-        base_dir = "downloads"
+        # Save to temporary file
+        # In Lambda, we must use /tmp
+        base_dir = "/tmp/downloads"
         flashcards_dir = os.path.join(base_dir, "flashcards", str(request.user_id), str(request.video_id))
         os.makedirs(flashcards_dir, exist_ok=True)
 
@@ -360,7 +382,8 @@ async def delete_video(video_id: int, user_id: str = "anonymous", db: Session = 
             raise HTTPException(status_code=404, detail="Video not found")
         
         # Delete from filesystem (pass user_id for user-specific paths)
-        downloader = VideoDownloader(user_id=user_id)
+        # In Lambda, we must use /tmp as the base directory
+        downloader = VideoDownloader(output_dir="/tmp/downloads", user_id=user_id)
         downloader.delete_video(None, video.title)  # Pass None for file_path since we don't store it
         
         # Delete associated files (flashcards, quizzes, transcripts)
@@ -438,8 +461,8 @@ async def translate_video(request: TranslateRequest, db: Session = Depends(get_d
             # Create a temporary local file
             content = read_file_content(transcript_path)
             
-            # Create temp directory
-            temp_dir = "downloads/temp"
+            # Create temp directory in /tmp
+            temp_dir = "/tmp/downloads/temp"
             os.makedirs(temp_dir, exist_ok=True)
             
             filename = os.path.basename(transcript_path)
@@ -656,7 +679,8 @@ async def generate_quiz(request: GenerateQuizRequest, db: Session = Depends(get_
 async def save_quiz(request: SaveQuizRequest, db: Session = Depends(get_db)):
     try:
         # 1. Save to File System
-        base_dir = "downloads"
+        # In Lambda, we must use /tmp
+        base_dir = "/tmp/downloads"
         quiz_dir = os.path.join(base_dir, "quizzes", str(request.user_id), str(request.video_id))
         os.makedirs(quiz_dir, exist_ok=True)
 

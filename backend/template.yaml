@@ -1,0 +1,44 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  yt-analyzer-backend
+  Serverless FastAPI backend for YouTube Analyzer
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 256
+    Environment:
+      Variables:
+        # These will be overridden by deploy script or parameter store
+        AWS_REGION: us-east-1
+
+Resources:
+  BackendFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: main.handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            Path: /{proxy+}
+            Method: any
+      Role: !Sub arn:aws:iam::${AWS::AccountId}:role/LabRole
+
+  # If you need to put Lambda in a VPC to access RDS, uncomment this:
+  #   VpcConfig:
+  #     SecurityGroupIds:
+  #       - sg-xxxxx
+  #     SubnetIds:
+  #       - subnet-xxxxx
+  #       - subnet-yyyyy
+
+Outputs:
+  ApiUrl:
+    Description: "API Gateway endpoint URL"
+    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com"

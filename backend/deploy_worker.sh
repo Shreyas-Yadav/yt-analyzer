@@ -29,7 +29,7 @@ fi
 echo "🐍 Installing Python dependencies..."
 # Ensure we are in the directory with pyproject.toml
 cd "$(dirname "$0")"
-uv sync
+uv sync --extra worker
 
 # 4. Check for .env file (Optional if using AWS SSM)
 if [ ! -f .env ]; then

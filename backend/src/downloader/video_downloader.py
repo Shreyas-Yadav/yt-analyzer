@@ -1,7 +1,5 @@
 import os
-import yt_dlp
-import ffmpeg
-import whisper
+
 
 class VideoDownloader:
     def __init__(self, output_dir="downloads", user_id=None):
@@ -45,6 +43,7 @@ class VideoDownloader:
             print("DEBUG: No PROXY_URL found, connecting directly.")
 
         try:
+            import yt_dlp
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True)
                 filename = ydl.prepare_filename(info)
@@ -72,6 +71,7 @@ class VideoDownloader:
             audio_path = os.path.join(self.audio_dir, audio_filename)
 
             # Extract audio using ffmpeg
+            import ffmpeg
             (
                 ffmpeg
                 .input(video_path)
@@ -99,6 +99,7 @@ class VideoDownloader:
 
             # Load Whisper model (tiny)
             print("Loading Whisper model...")
+            import whisper
             model = whisper.load_model("tiny")
             
             # Transcribe audio

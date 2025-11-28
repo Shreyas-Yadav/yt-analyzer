@@ -11,3 +11,7 @@ downloads/*
 
 # Environment
 .env
+
+*.zip
+
+.DS_Store
