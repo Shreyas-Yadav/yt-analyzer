@@ -103,7 +103,7 @@ class VideoDownloader:
             
             # Transcribe audio
             print(f"Transcribing audio: {audio_path}")
-            result = model.transcribe(audio_path)
+            result = model.transcribe(audio_path, fp16=False)
             
             # Construct transcript filename
             if video_title:

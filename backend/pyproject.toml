@@ -17,6 +17,7 @@ dependencies = [
     "sqlalchemy>=2.0.44",
     "uvicorn>=0.38.0",
     "yt-dlp>=2025.11.12",
+    "langdetect>=1.0.9",
 ]
 
 
