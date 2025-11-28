@@ -29,7 +29,7 @@ class VideoDownloader:
         Returns the path to the downloaded file.
         """
         ydl_opts = {
-            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            'format': 'bestaudio/best',
             'outtmpl': os.path.join(self.videos_dir, '%(title)s.%(ext)s'),
             'quiet': True,
             'no_warnings': True,
