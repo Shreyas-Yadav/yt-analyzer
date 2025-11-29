@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthService } from '../services/AuthService';
+import Turnstile from 'react-turnstile';
 
 const Signup = () => {
     const [email, setEmail] = useState('');
@@ -8,6 +9,7 @@ const Signup = () => {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [confirmationCode, setConfirmationCode] = useState('');
     const [needsConfirmation, setNeedsConfirmation] = useState(false);
+    const [captchaToken, setCaptchaToken] = useState(null);
     const navigate = useNavigate();
 
     const handleSignUp = async (e) => {
@@ -157,10 +159,19 @@ const Signup = () => {
                         </div>
                     </div>
 
+                    <div className="flex justify-center">
+                        <Turnstile
+                            sitekey={import.meta.env.VITE_TURNSTILE_SITE_KEY}
+                            onVerify={(token) => setCaptchaToken(token)}
+                        />
+                    </div>
+
                     <div>
                         <button
                             type="submit"
-                            className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                            disabled={!captchaToken}
+                            className={`group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white ${!captchaToken ? 'bg-indigo-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700'
+                                } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500`}
                         >
                             Sign up
                         </button>
