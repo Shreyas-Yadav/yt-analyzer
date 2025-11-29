@@ -37,10 +37,6 @@ if [ ! -f .env ]; then
     echo "Ensure you have configured AWS SSM Parameter Store (/yt-analyzer/config) OR create a .env file."
 fi
 
-echo "🔄 Restarting Worker..."
-pkill -f worker.py || true
-nohup uv run worker.py > worker.log 2>&1 &
-
-echo "✅ Worker started in background!"
-echo "📜 Tailing logs (Ctrl+C to exit tail, worker will keep running):"
-tail -f worker.log
+echo "🔄 Starting Worker (Foreground)..."
+# Run directly in foreground so we can see output immediately
+uv run worker.py
