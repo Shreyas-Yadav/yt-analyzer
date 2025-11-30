@@ -25,6 +25,45 @@ backend/
 -   **Adapter**: `Mangum` wraps the FastAPI app to handle AWS Lambda events.
 -   **Deployment**: Packaged as a Docker container or Zip file.
 
+### Request Flow (API Gateway -> Lambda -> FastAPI)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Client
+    participant APIG as API Gateway
+    participant Lambda as AWS Lambda
+    participant Mangum as Mangum Adapter
+    participant FastAPI as FastAPI App
+
+    Note over Client, APIG: 1. User makes a request
+    Client->>APIG: HTTP Request (e.g., GET /videos)
+    
+    Note over APIG: 2. Matches Trigger
+    alt Root Path
+        APIG->>APIG: Matches "default/yt-backend..."
+    else Sub-Path
+        APIG->>APIG: Matches "default/{proxy+}"
+    end
+
+    Note over APIG, Lambda: 3. Forward to Compute
+    APIG->>Lambda: Invoke with JSON Event
+    
+    Note over Lambda, Mangum: 4. Adapter Layer
+    Lambda->>Mangum: Handler(event, context)
+    Mangum->>Mangum: Convert AWS Event -> ASGI Scope
+    
+    Note over Mangum, FastAPI: 5. Application Logic
+    Mangum->>FastAPI: Call App
+    FastAPI->>FastAPI: Route to Endpoint (router.get("/videos"))
+    FastAPI-->>Mangum: Return HTTP Response
+    
+    Note over Mangum, Client: 6. Response
+    Mangum-->>Lambda: Convert to API Gateway Response Format
+    Lambda-->>APIG: Return JSON
+    APIG-->>Client: HTTP 200 OK
+```
+
 ### Key Endpoints
 -   `POST /analyze`: Accepts a YouTube URL.
     -   Validates the URL.

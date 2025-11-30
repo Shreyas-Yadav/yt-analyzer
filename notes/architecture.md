@@ -15,44 +15,53 @@
 ## 2. AWS Infrastructure Architecture
 
 ```mermaid
-graph TD
-    User(("User (Browser)")) -->|HTTPS| CF{Cloudflare}
+flowchart TD
+    %% Styling
+    classDef aws fill:#FF9900,stroke:#232F3E,stroke-width:2px,color:white;
+    classDef db fill:#3355DA,stroke:#232F3E,stroke-width:2px,color:white;
+    classDef ext fill:#f9f9f9,stroke:#333,stroke-width:2px;
+
+    User[User Browser] -->|HTTPS| CF
     
-    subgraph Edge_Network
-        CF -->|Static Assets| S3_Web[S3 Bucket<br/>(shri.software)]
+    subgraph Edge_Network [Edge Network]
+        direction TB
+        CF{Cloudflare}
+        CF -->|Static Assets| S3_Web[S3 Bucket: shri.software]
         CF -->|API Calls| APIG[API Gateway]
     end
 
     subgraph AWS_Cloud [AWS Region: us-east-1]
+        direction TB
         
-        subgraph IAM_Auth
-            Cognito[AWS Cognito<br/>User Pool]
+        subgraph IAM_Auth [Authentication]
+            Cognito[AWS Cognito User Pool]:::aws
         end
 
         APIG -->|Auth Token| Cognito
-        APIG -->|Proxy| Lambda[Lambda Function<br/>(FastAPI)]
+        APIG -->|Proxy| Lambda[Lambda Function: FastAPI]:::aws
 
         subgraph VPC [Custom VPC]
+            direction TB
             
-            subgraph Public_Subnet
-                NAT[NAT Gateway]
-                IGW[Internet Gateway]
+            subgraph Public_Subnet [Public Subnet]
+                NAT[NAT Gateway]:::aws
+                IGW[Internet Gateway]:::aws
             end
             
-            subgraph Private_Subnet
+            subgraph Private_Subnet [Private Subnet]
                 Lambda
-                RDS[(RDS MySQL<br/>db.t3.micro)]
-                EC2[EC2 Worker<br/>(g4dn.xlarge)]
+                RDS[(RDS MySQL: db.t3.micro)]:::db
+                EC2[EC2 Worker: g4dn.xlarge]:::aws
             end
         end
 
         %% Data Flow
         Lambda -->|Read/Write| RDS
-        Lambda -->|Queue Job| SQS[SQS Queue]
+        Lambda -->|Queue Job| SQS[SQS Queue]:::aws
         
         EC2 -->|Poll Messages| SQS
         EC2 -->|Update Status| RDS
-        EC2 -->|Download/Upload| S3_Data[S3 Bucket<br/>(Data Storage)]
+        EC2 -->|Download/Upload| S3_Data[S3 Bucket: Data Storage]:::aws
         
         %% Network Flow
         EC2 -.->|Outbound Traffic| NAT
@@ -109,3 +118,52 @@ graph TD
 3.  **Data Security**:
     -   **Encryption at Rest**: RDS and S3 encryption enabled.
     -   **Encryption in Transit**: HTTPS enforced via Cloudflare.
+
+---
+
+## 5. System Workflow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant Frontend as React App
+    participant API as API Gateway + Lambda
+    participant DB as RDS (MySQL)
+    participant SQS as SQS Queue
+    participant Worker as EC2 Worker
+    participant S3 as S3 Bucket
+    participant LLM as Claude/OpenAI API
+
+    Note over User, API: 1. Submission
+    User->>Frontend: Enters YouTube URL
+    Frontend->>API: POST /analyze (URL, Auth Token)
+    API->>DB: Create Video Record (Status: queued)
+    API->>SQS: Send Message (VideoID, URL)
+    API-->>Frontend: Return VideoID (202 Accepted)
+
+    Note over Worker, S3: 2. Async Processing
+    loop Poll SQS
+        Worker->>SQS: Receive Message
+    end
+    
+    Worker->>Worker: Extract Audio (yt-dlp)
+    Worker->>Worker: Transcribe Audio (Local Whisper)
+    
+    Worker->>S3: Upload Audio, Transcript
+    Worker->>DB: Update Video Status (completed) & S3 Paths
+    Worker->>SQS: Delete Message
+
+    Note over User, Frontend: 3. Result Retrieval & Generation
+    loop Polling / Webhook
+        Frontend->>API: GET /videos/{id}
+        API->>DB: Check Status
+        DB-->>API: Return Status (completed)
+    end
+    
+    Frontend->>API: POST /flashcards/generate (VideoID)
+    API->>S3: Read Transcript
+    API->>LLM: Generate Flashcards (Transcript)
+    LLM-->>API: Return JSON Content
+    API-->>Frontend: Return Flashcards
+```
